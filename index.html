@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Physics Editor — Sticky Objects & Slopes</title>
+<style>
+  html,body { height:100%; margin:0; }
+  #container { width:100%; height:100vh; background:#f6f7fb; overflow:hidden; }
+
+  /* UI */
+  .ui {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    width: 320px;
+    background: rgba(255,255,255,0.98);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    font-family: Inter, system-ui, Arial;
+    z-index: 999;
+  }
+  .ui h3 { margin:0 0 8px 0; font-size:15px; }
+  .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  label { width:110px; font-size:13px; color:#333; }
+  input[type="number"], select { flex:1; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px; }
+  button { padding:8px 10px; border-radius:8px; border:none; cursor:pointer; background:#2563eb; color:#fff; }
+  button.ghost { background:#e6e7eb; color:#111; }
+  .small { padding:6px 8px; font-size:13px; }
+  #selectionInfo { margin-top:6px; font-size:13px; color:#444; min-height:32px; }
+
+  /* footer hint */
+  #hint { position: fixed; right:12px; bottom:12px; background:rgba(0,0,0,0.6); color:#fff; padding:8px 10px; border-radius:8px; font-size:13px; z-index:999; }
+</style>
+</head>
+<body>
+<div id="container"></div>
+
+<div class="ui" id="ui">
+  <h3>Editor Fisika — Objects & Slopes</h3>
+
+  <div style="font-weight:600;margin-bottom:6px">Object spawn</div>
+  <div class="row">
+    <label>Tipe</label>
+    <select id="typeSelect"><option value="box">Box</option><option value="circle">Circle</option></select>
+  </div>
+  <div class="row">
+    <label>Massa (kg)</label>
+    <input id="massInput" type="number" step="0.1" value="2" min="0.1" />
+  </div>
+  <div class="row" id="sizeBoxRow">
+    <label>Ukuran (W×H)</label>
+    <input id="widthInput" type="number" value="60" min="8" />
+    <input id="heightInput" type="number" value="60" min="8" />
+  </div>
+  <div class="row" id="radiusRow" style="display:none;">
+    <label>Radius</label>
+    <input id="radiusInput" type="number" value="30" min="4" />
+  </div>
+  <div class="row">
+    <label>Friction</label>
+    <input id="frictionInput" type="number" step="0.05" value="0.3" min="0" max="1" />
+  </div>
+  <div class="row">
+    <label>FrictionStatic</label>
+    <input id="fricStaticInput" type="number" step="0.05" value="0.5" min="0" max="1" />
+  </div>
+  <div class="row">
+    <label>Restitution</label>
+    <input id="restitutionInput" type="number" step="0.01" value="0.0" min="0" max="1" />
+  </div>
+
+  <div class="row">
+    <button id="spawnCenterBtn" class="small">Spawn Tengah</button>
+    <button id="spawnClickBtn" class="small ghost">Spawn di Klik: OFF</button>
+  </div>
+
+  <hr />
+
+  <div style="font-weight:600;margin-bottom:6px">Slope (bidang miring)</div>
+  <div class="row">
+    <label>Lebar</label>
+    <input id="sWidth" type="number" value="300" />
+    <label style="width:auto">Tinggi</label>
+    <input id="sHeight" type="number" value="20" />
+  </div>
+  <div class="row">
+    <label>Angle (rad)</label>
+    <input id="sAngle" type="number" step="0.05" value="0.3" />
+  </div>
+  <div class="row">
+    <label>Friction</label>
+    <input id="sFriction" type="number" step="0.05" value="0.8" />
+  </div>
+  <div class="row">
+    <button id="spawnSlopeCenter" class="small">Spawn Slope Tengah</button>
+    <button id="spawnSlopeClick" class="small ghost">Spawn Slope Klik: OFF</button>
+  </div>
+
+  <hr />
+  <div class="row">
+    <button id="toggleSticky" class="small ghost">Toggle Sticky (selected)</button>
+    <button id="deleteSelected" class="small ghost">Delete</button>
+    <button id="snapGrid" class="small ghost">Snap Grid</button>
+  </div>
+
+  <div class="row">
+    <button id="exportBtn" class="small ghost">Export JSON</button>
+    <button id="resetBtn" class="small ghost">Reset Semua</button>
+  </div>
+
+  <div id="selectionInfo">Selected: —</div>
+</div>
+
+<div id="hint">Klik canvas untuk interaksi (toggle spawn mode di UI)</div>
+
+<!-- Matter.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+<script>
+(function(){
+  const { Engine, Render, Runner, Bodies, Composite, Body, Events, Mouse, MouseConstraint, World, Query } = Matter;
+
+  // ---------- setup ----------
+  const container = document.getElementById('container');
+  const w = () => window.innerWidth;
+  const h = () => window.innerHeight;
+
+  const engine = Engine.create();
+  const world = engine.world;
+  world.gravity.y = 1;
+
+  const render = Render.create({
+    element: container,
+    engine: engine,
+    options: { width: w(), height: h(), wireframes: false, background: '#f6f7fb' }
+  });
+  Render.run(render);
+  const runner = Runner.create(); Runner.run(runner, engine);
+
+  // invisible bounds
+  const wallThickness = 300;
+  const ground = Bodies.rectangle(w()/2, h()+wallThickness/2, w(), wallThickness, { isStatic:true, render:{ visible:false }});
+  const leftWall = Bodies.rectangle(-wallThickness/2, h()/2, wallThickness, h(), { isStatic:true, render:{ visible:false }});
+  const rightWall = Bodies.rectangle(w()+wallThickness/2, h()/2, wallThickness, h(), { isStatic:true, render:{ visible:false }});
+  Composite.add(world, [ground,leftWall,rightWall]);
+
+  // ---------- state ----------
+  let userBodies = [];     // dynamic objects created by user
+  let slopeBodies = [];    // static slopes
+  let selected = null;     // selected body (user object or slope)
+  let spawnObjectOnClick = false;
+  let spawnSlopeOnClick = false;
+
+  // ---------- UI refs ----------
+  const typeSelect = document.getElementById('typeSelect');
+  const massInput = document.getElementById('massInput');
+  const widthInput = document.getElementById('widthInput');
+  const heightInput = document.getElementById('heightInput');
+  const radiusInput = document.getElementById('radiusInput');
+  const radiusRow = document.getElementById('radiusRow');
+  const sizeBoxRow = document.getElementById('sizeBoxRow');
+  const frictionInput = document.getElementById('frictionInput');
+  const fricStaticInput = document.getElementById('fricStaticInput');
+  const restitutionInput = document.getElementById('restitutionInput');
+  const spawnCenterBtn = document.getElementById('spawnCenterBtn');
+  const spawnClickBtn = document.getElementById('spawnClickBtn');
+
+  const sWidth = document.getElementById('sWidth');
+  const sHeight = document.getElementById('sHeight');
+  const sAngle = document.getElementById('sAngle');
+  const sFriction = document.getElementById('sFriction');
+  const spawnSlopeCenter = document.getElementById('spawnSlopeCenter');
+  const spawnSlopeClick = document.getElementById('spawnSlopeClick');
+
+  const toggleStickyBtn = document.getElementById('toggleSticky');
+  const deleteSelectedBtn = document.getElementById('deleteSelected');
+  const snapGridBtn = document.getElementById('snapGrid');
+  const exportBtn = document.getElementById('exportBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const selectionInfo = document.getElementById('selectionInfo');
+
+  // update size UI
+  function updateSizeUI(){
+    if(typeSelect.value === 'circle'){
+      radiusRow.style.display = '';
+      sizeBoxRow.style.display = 'none';
+    } else {
+      radiusRow.style.display = 'none';
+      sizeBoxRow.style.display = '';
+    }
+  }
+  typeSelect.addEventListener('change', updateSizeUI);
+  updateSizeUI();
+
+  // ---------- factories ----------
+  function createUserBody(params){
+    // params: { type, mass, x, y, width, height, radius, friction, frictionStatic, restitution }
+    let body;
+    if(params.type === 'circle'){
+      body = Bodies.circle(params.x, params.y, params.radius, {
+        friction: params.friction,
+        frictionStatic: params.frictionStatic,
+        restitution: params.restitution,
+        density: Math.max(0.0001, params.mass / (Math.PI * params.radius * params.radius))
+      });
+    } else {
+      body = Bodies.rectangle(params.x, params.y, params.width, params.height, {
+        friction: params.friction,
+        frictionStatic: params.frictionStatic,
+        restitution: params.restitution,
+        density: Math.max(0.0001, params.mass / Math.max(1, params.width * params.height))
+      });
+    }
+
+    // metadata
+    body.isUserObject = true;
+    body.massValue = params.mass;
+    body.isSticky = false;      // apakah ditempel (static)
+    body.isDragging = false;
+    body.isPlaced = true;       // placed by default after spawn
+    body.smoothedMoment = 0;
+    body.labelText = params.mass + 'kg';
+    return body;
+  }
+
+  function createSlope(params){
+    // params: { x,y, width, height, angle, friction }
+    const body = Bodies.rectangle(params.x, params.y, params.width, params.height, {
+      isStatic: true,
+      friction: params.friction,
+      render: { fillStyle:'#444' }
+    });
+    Body.rotate(body, params.angle);
+    body.isSlope = true;
+    body.isStatic = true;
+    body.slopeProps = { angle: params.angle, width: params.width, height: params.height };
+    return body;
+  }
+
+  // ---------- mouse & drag ----------
+  const mouse = Mouse.create(render.canvas);
+  const mouseConstraint = MouseConstraint.create(engine, {
+    mouse,
+    constraint: { stiffness: 0.18, render:{ visible:false } }
+  });
+  Composite.add(world, mouseConstraint);
+  render.mouse = mouse;
+
+  // manage drag flags & allow dragging sticky by temporarily unstatic-ing
+  Events.on(mouseConstraint, 'startdrag', (ev) => {
+    const b = ev.body;
+    if(!b) return;
+    // select this body
+    selectBody(b);
+
+    if(b.isUserObject){
+      b.isDragging = true;
+      b.isPlaced = false;
+      // if sticky and static, temporarily make non-static so it can be moved
+      if(b.isSticky && b.isStatic){
+        b._wasStickyTemp = true;
+        Body.setStatic(b, false);
+      }
+    }
+  });
+
+  Events.on(mouseConstraint, 'enddrag', (ev) => {
+    const b = ev.body;
+    if(!b) return;
+    if(b.isUserObject){
+      // small delay before considered placed to avoid instant shock
+      setTimeout(() => {
+        b.isDragging = false;
+        b.isPlaced = true;
+        // if it was temporarily unstatic due to dragging sticky, return to sticky
+        if(b._wasStickyTemp){
+          b._wasStickyTemp = false;
+          b.isSticky = true;
+          Body.setStatic(b, true);
+          Body.setVelocity(b, { x:0, y:0 });
+        }
+      }, 80);
+      // small snap-to-grid for x to help alignment (optional)
+      const snapX = Math.round(b.position.x / 5) * 5;
+      Body.setPosition(b, { x: snapX, y: b.position.y });
+      // clamp velocity
+      Body.setVelocity(b, { x: Math.max(-60, Math.min(60, b.velocity.x)), y: Math.max(-120, Math.min(120, b.velocity.y)) });
+    }
+  });
+
+  // click selection (also allow clicking static bodies)
+  render.canvas.addEventListener('pointerdown', (ev) => {
+    // ignore when clicking UI (simple check)
+    if(ev.target && ev.target.closest && ev.target.closest('.ui')) return;
+
+    // spawn logic if enabled
+    const rect = render.canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+
+    // first priority: spawn slope if slope-click-mode ON
+    if(spawnSlopeOnClick){
+      spawnSlopeAt(x,y);
+      return;
+    }
+    if(spawnObjectOnClick){
+      spawnObjectAt(x,y);
+      return;
+    }
+
+    // otherwise selection: query world bodies at point
+    const found = Query.point(world.bodies, { x, y });
+    if(found && found.length > 0){
+      // pick topmost
+      const top = found[found.length -1];
+      selectBody(top);
+    } else {
+      // deselect if clicked empty space
+      selectBody(null);
+    }
+  });
+
+  // ---------- spawn helpers ----------
+  function spawnObjectAt(x,y){
+    const type = typeSelect.value;
+    const mass = parseFloat(massInput.value) || 1;
+    const friction = parseFloat(frictionInput.value) || 0;
+    const frictionStatic = parseFloat(fricStaticInput.value) || 0;
+    const restitution = parseFloat(restitutionInput.value) || 0;
+    if(type === 'circle'){
+      const radius = parseFloat(radiusInput.value) || 20;
+      const body = createUserBody({ type:'circle', mass, x, y, radius, friction, frictionStatic, restitution });
+      Composite.add(world, body); userBodies.push(body);
+      return body;
+    } else {
+      const widthVal = parseFloat(widthInput.value) || 40;
+      const heightVal = parseFloat(heightInput.value) || 40;
+      const body = createUserBody({ type:'box', mass, x, y, width:widthVal, height:heightVal, friction, frictionStatic, restitution });
+      Composite.add(world, body); userBodies.push(body);
+      return body;
+    }
+  }
+
+  function spawnSlopeAt(x, y) {
+    const widthVal = parseFloat(sWidth.value) || 300;
+    const heightVal = parseFloat(sHeight.value) || 20;
+    const angle = parseFloat(sAngle.value) || 0;
+    const friction = parseFloat(sFriction.value) || 0.8;
+
+    const slope = Bodies.rectangle(x, y, widthVal, heightVal, {
+      friction,
+      angle,
+      isStatic: false, // awalnya bisa digerakkan
+      render: { fillStyle: '#607d8b' }
+    });
+    slope.isSlope = true;
+    slope.isUserObject = true; 
+    slope.slopeProps = { width: widthVal, height: heightVal, angle };
+
+    Composite.add(world, slope);
+    slopeBodies.push(slope);
+
+    return slope;
+  }
+
+  spawnCenterBtn.addEventListener('click', () => spawnObjectAt(w()/2, h()/2 - 120));
+  spawnSlopeCenter.addEventListener('click', () => spawnSlopeAt(w()/2 + 200, h()/2 + 100));
+
+  spawnClickBtn.addEventListener('click', () => {
+    spawnObjectOnClick = !spawnObjectOnClick;
+    spawnClickBtn.textContent = `Spawn di Klik: ${spawnObjectOnClick ? 'ON' : 'OFF'}`;
+    spawnClickBtn.classList.toggle('ghost', !spawnObjectOnClick);
+    // ensure slope-click off when object click on
+    if(spawnObjectOnClick) { spawnSlopeOnClick = false; spawnSlopeClick.textContent = 'Spawn Slope Klik: OFF'; spawnSlopeClick.classList.add('ghost'); }
+  });
+
+  spawnSlopeClick.addEventListener('click', () => {
+    spawnSlopeOnClick = !spawnSlopeOnClick;
+    spawnSlopeClick.textContent = `Spawn Slope Klik: ${spawnSlopeOnClick ? 'ON' : 'OFF'}`;
+    spawnSlopeClick.classList.toggle('ghost', !spawnSlopeOnClick);
+    if(spawnSlopeOnClick) { spawnObjectOnClick = false; spawnClickBtn.textContent = 'Spawn di Klik: OFF'; spawnClickBtn.classList.add('ghost'); }
+  });
+
+  // ---------- selection / actions ----------
+  function selectBody(b){
+    selected = b;
+    if(!b){
+      selectionInfo.textContent = 'Selected: —';
+    } else {
+      // info show type, mass, sticky
+      const t = b.isSlope ? 'Slope' : (b.circleRadius ? 'Circle' : 'Box');
+      const massInfo = b.isUserObject ? `, mass=${b.massValue}kg` : '';
+      const stickyInfo = b.isUserObject ? (b.isSticky ? ', STICKY' : '') : '';
+      selectionInfo.textContent = `Selected: ${t}${massInfo}${stickyInfo}`;
+    }
+  }
+
+  toggleStickyBtn.addEventListener('click', () => {
+    if(!selected || (!selected.isUserObject && !selected.isSlope)) {
+      return alert('Pilih objek atau slope dulu');
+    }
+    // toggle sticky
+    selected.isSticky = !selected.isSticky;
+    if(selected.isSticky){
+      Body.setVelocity(selected, { x:0, y:0 });
+      Body.setAngularVelocity(selected, 0);
+      Body.setStatic(selected, true);
+    } else {
+      Body.setStatic(selected, false);
+    }
+
+    // update info panel
+    const t = selected.isSlope ? 'Slope' : (selected.circleRadius ? 'Circle' : 'Box');
+    const massInfo = selected.isSlope ? '' : `, mass=${selected.massValue}kg`;
+    const stickyInfo = selected.isSticky ? ', STICKY' : '';
+    selectionInfo.textContent = `Selected: ${t}${massInfo}${stickyInfo}`;
+  });
+
+  deleteSelectedBtn.addEventListener('click', () => {
+    if(!selected) return alert('Tidak ada yang dipilih');
+    // remove from arrays & world
+    try{ Composite.remove(world, selected); }catch(e){}
+    userBodies = userBodies.filter(b => b !== selected);
+    slopeBodies = slopeBodies.filter(s => s !== selected);
+    selected = null;
+    selectionInfo.textContent = 'Selected: —';
+  });
+
+  snapGridBtn.addEventListener('click', () => {
+    if(!selected) return alert('Pilih objek untuk snap');
+    const x = Math.round(selected.position.x / 10) * 10;
+    const y = Math.round(selected.position.y / 10) * 10;
+    Body.setPosition(selected, { x, y });
+  });
+
+  resetBtn.addEventListener('click', () => {
+    // remove user bodies and slopes
+    userBodies.forEach(b => { try{ Composite.remove(world, b);}catch(e){} });
+    slopeBodies.forEach(s => { try{ Composite.remove(world, s);}catch(e){} });
+    userBodies = []; slopeBodies = []; selected = null; selectionInfo.textContent = 'Selected: —';
+  });
+  // ---------- rotate slope ----------
+  Events.on(mouseConstraint, 'mousedown', (event) => {
+    const mouse = event.mouse;
+    const clickedBodies = Matter.Query.point(slopeBodies, mouse.position);
+    if (clickedBodies.length > 0) {
+      const slope = clickedBodies[0];
+      if (slope.isSlope) {
+        // rotasi 5° ke kiri
+        const newAngle = slope.angle - (Math.PI / 36); // 5 derajat
+        Body.setAngle(slope, newAngle);
+
+        // simpan ke properti slope agar saat export JSON ikut update
+        slope.slopeProps.angle = newAngle;
+      }
+    }
+  });
+
+  // ---------- export ----------
+  exportBtn.addEventListener('click', () => {
+    const out = { objects: [], slopes: [] };
+
+    // export user bodies
+    userBodies.forEach(b => {
+      if(!b) return;
+      if(b.circleRadius){
+        out.objects.push({
+          type: 'circle',
+          massa: b.massValue || Math.round(b.mass*100)/100,
+          radius: Math.round(b.circleRadius),
+          position: { x: Math.round(b.position.x), y: Math.round(b.position.y) },
+          friction: b.friction,
+          frictionStatic: b.frictionStatic,
+          restitution: b.restitution,
+          isStatic: !!b.isStatic,
+          sticky: !!b.isSticky
+        });
+      } else {
+        const widthVal = Math.round(b.bounds.max.x - b.bounds.min.x);
+        const heightVal = Math.round(b.bounds.max.y - b.bounds.min.y);
+        out.objects.push({
+          type: 'box',
+          massa: b.massValue || Math.round(b.mass*100)/100,
+          ukuran: { width: widthVal, height: heightVal },
+          position: { x: Math.round(b.position.x), y: Math.round(b.position.y) },
+          friction: b.friction,
+          frictionStatic: b.frictionStatic,
+          restitution: b.restitution,
+          isStatic: !!b.isStatic,
+          sticky: !!b.isSticky
+        });
+      }
+    });
+
+    // export slopes
+    slopeBodies.forEach(s => {
+      out.slopes.push({
+        type: 'rectangle',
+        position: { x: Math.round(s.position.x), y: Math.round(s.position.y) },
+        ukuran: { width: Math.round(s.slopeProps.width), height: Math.round(s.slopeProps.height) },
+        angle: s.slopeProps.angle,
+        isStatic: true,
+        friction: s.friction
+      });
+    });
+
+    const str = JSON.stringify(out, null, 2);
+    const win = window.open('', '_blank');
+    win.document.body.style.fontFamily = 'monospace';
+    win.document.body.innerHTML = '<pre>' + str + '</pre>';
+  });
+
+  // ---------- render overlays (labels & selection highlight) ----------
+  Events.on(render, 'afterRender', () => {
+    const ctx = render.context;
+    // labels mass
+    userBodies.forEach(b => {
+      if(!b.labelText) return;
+      ctx.save();
+      ctx.fillStyle = '#fff';
+      ctx.font = '13px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.labelText, b.position.x, b.position.y + 6);
+      ctx.restore();
+    });
+
+    // selection highlight
+    if(selected){
+      ctx.save();
+      ctx.strokeStyle = 'rgba(34,197,94,0.95)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if(selected.circleRadius){
+        ctx.arc(selected.position.x, selected.position.y, selected.circleRadius+6, 0, Math.PI*2);
+      } else {
+        const w = selected.bounds.max.x - selected.bounds.min.x;
+        const h = selected.bounds.max.y - selected.bounds.min.y;
+        ctx.rect(selected.position.x - w/2 - 6, selected.position.y - h/2 - 6, w + 12, h + 12);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+
+  // ---------- stability helpers ----------
+  Events.on(engine, 'beforeUpdate', () => {
+    // clamp velocities of user bodies
+    userBodies.forEach(b => {
+      if(!b || b.isStatic) return;
+      if(Math.abs(b.velocity.x) > 80) Body.setVelocity(b, { x: Math.sign(b.velocity.x)*80, y: b.velocity.y });
+      if(Math.abs(b.velocity.y) > 200) Body.setVelocity(b, { x: b.velocity.x, y: Math.sign(b.velocity.y)*200 });
+    });
+  });
+
+  // ---------- resize ----------
+  function onResize(){
+    const W = w(), H = h();
+    render.canvas.width = W; render.canvas.height = H;
+    render.options.width = W; render.options.height = H;
+    Body.setPosition(ground, { x: W/2, y: H + wallThickness/2 });
+    Body.setPosition(leftWall, { x: -wallThickness/2, y: H/2 });
+    Body.setPosition(rightWall, { x: W + wallThickness/2, y: H/2 });
+    Render.lookAt(render, { min:{ x:0,y:0 }, max:{ x: W, y: H } });
+  }
+  window.addEventListener('resize', onResize);
+
+  // initial hint text
+  document.getElementById('hint').textContent = 'Mode spawn klik untuk object/slope bisa diaktifkan di UI';
+
+  // ---------- done ----------
+})();
+</script>
+</body>
+</html>

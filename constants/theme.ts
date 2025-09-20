@@ -1,53 +1,34 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
-import { Platform } from 'react-native';
-
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
-export const Colors = {
+// constants/theme.ts
+export const colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    tint: "#7B5CF5", // ungu lembut
+    primary: "#7B5CF5", // kacamata tupai
+    accent: "#4DB6FF", // biru cerah untuk aksen fisika
+    background: "#FFF8F2", // krem hangat (ramah anak)
+    card: "#FFFFFF", // putih bersih
+    text: "#3A2E2E", // cokelat tua
+    muted: "#8C7B75", // cokelat abu
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    tint: "#7B5CF5",
+    primary: "#7B5CF5",
+    accent: "#4DB6FF",
+    background: "#1E1A1A", // cokelat gelap
+    card: "#2A2424",
+    text: "#FFFFFF",
+    muted: "#B8AFAF",
   },
+  // Flat fallback (untuk backward compatibility)
+  primary: "#7B5CF5",
+  accent: "#4DB6FF",
+  background: "#FFF8F2",
+  card: "#FFFFFF",
+  text: "#3A2E2E",
+  muted: "#8C7B75",
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+export const fonts = {
+  title: 24,
+  subtitle: 18,
+  body: 16,
+};
