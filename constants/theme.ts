@@ -1,24 +1,24 @@
 // constants/theme.ts
 export const colors = {
   light: {
-    tint: "#7B5CF5", // ungu lembut
-    primary: "#7B5CF5", // kacamata tupai
-    accent: "#4DB6FF", // biru cerah untuk aksen fisika
-    background: "#FFF8F2", // krem hangat (ramah anak)
-    card: "#FFFFFF", // putih bersih
-    text: "#3A2E2E", // cokelat tua
-    muted: "#8C7B75", // cokelat abu
+    tint: "#7B5CF5",
+    primary: "#7B5CF5",
+    accent: "#4DB6FF",
+    background: "#FFF8F2",
+    card: "#FFFFFF",
+    text: "#3A2E2E",
+    muted: "#8C7B75",
   },
   dark: {
     tint: "#7B5CF5",
     primary: "#7B5CF5",
     accent: "#4DB6FF",
-    background: "#1E1A1A", // cokelat gelap
+    background: "#1E1A1A",
     card: "#2A2424",
     text: "#FFFFFF",
     muted: "#B8AFAF",
   },
-  // Flat fallback (untuk backward compatibility)
+  // Flat fallback
   primary: "#7B5CF5",
   accent: "#4DB6FF",
   background: "#FFF8F2",
@@ -28,7 +28,37 @@ export const colors = {
 };
 
 export const fonts = {
-  title: 24,
-  subtitle: 18,
-  body: 16,
+  // Font families dengan fallback system fonts
+  title: "Baloo2_700Bold",
+  titleFallback: "System", // iOS fallback
+  
+  subtitle: "Baloo2_600SemiBold", 
+  subtitleFallback: "System",
+  
+  body: "Nunito_500Medium", // Ganti ke Medium untuk lebih tebal
+  bodyFallback: "System",
+  
+  bodyBold: "Nunito_700Bold",
+  bodyBoldFallback: "System",
+  
+  bodySemiBold: "Nunito_600SemiBold",
+  bodySemiBoldFallback: "System",
+  
+  // Font sizes
+  sizes: {
+    title: 24,
+    subtitle: 18,
+    body: 16,
+    small: 14,
+    caption: 12,
+  },
+  
+  // Font weights untuk fallback
+  weights: {
+    normal: "400",
+    medium: "500",
+    semibold: "600",
+    bold: "700",
+    extrabold: "800",
+  }
 };

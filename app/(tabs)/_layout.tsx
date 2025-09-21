@@ -3,7 +3,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { colors } from "@/constants/theme";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 export default function TabLayout() {
   return (
@@ -44,11 +44,9 @@ export default function TabLayout() {
       name="profile"
       options={{
         title: "Profil",
-        tabBarIcon: ({ focused }) => (
+        tabBarIcon: ({ color }) => (
         <View style={styles.iconWrap}>
-          <Image 
-          source={require("@/assets/icon/profile.png")} 
-          style={styles.iconImage}/>
+          <IconSymbol size={28} name="person" color={color} />
         </View>
         ),
       }}
@@ -77,10 +75,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flex: 1,
-  },
-  iconImage: {
-    width: 65,
-    height: 65,
-    resizeMode: 'contain',
   },
 });
