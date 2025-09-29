@@ -1,10 +1,10 @@
 // app/simulasi/gesek-miring.tsx
-import React, { useRef } from "react";
-import { Alert, Button, StyleSheet, Text, View, ScrollView } from "react-native";
-import { WebView, WebViewMessageEvent } from "react-native-webview";
-import { colors, fonts } from "../../constants/theme";
 import { useFocusEffect } from '@react-navigation/native';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import React, { useRef } from "react";
+import { Alert, Button, StyleSheet, Text, View } from "react-native";
+import { WebView, WebViewMessageEvent } from "react-native-webview";
+import { colors } from "../../constants/theme";
 
 const simConfig = {
   question_text:
@@ -264,7 +264,7 @@ export default function GesekMiring() {
         }
       };
 
-      lockToLandscape();
+      // lockToLandscape();
 
       // Cleanup - unlock when leaving screen
       return () => {
@@ -319,7 +319,8 @@ export default function GesekMiring() {
         <WebView
           originWhitelist={["*"]}
           ref={webviewRef}
-          source={{ html }}
+          // source={{ html }}
+          source={{uri: 'http://192.168.40.146:8000/login'}}
           onMessage={onMessage}
           javaScriptEnabled
           domStorageEnabled

@@ -20,21 +20,21 @@ const slides = [
     title: "Belajar Fisika Jadi Seru",
     subtitle:
       "Temukan cara baru memahami konsep fisika melalui simulasi interaktif",
-    image: require("@/assets/icon/profile.png"),
+    image: require("@/assets/icon/onboarding_1.png"),
   },
   {
     id: "2",
     title: "Simulasi Interaktif",
     subtitle:
       "Mainkan dan eksperimen dengan berbagai simulasi fisika secara real-time",
-    image: require("@/assets/icon/profile.png"),
+    image: require("@/assets/icon/onboarding_2.png"),
   },
   {
     id: "3",
     title: "Jelajahi Dunia Fisika",
     subtitle:
       "Mulai perjalanan pembelajaran fisika yang menyenangkan sekarang juga!",
-    image: require("@/assets/icon/profile.png"),
+    image: require("@/assets/icon/onboarding_3.png"),
   },
 ];
 
@@ -152,8 +152,8 @@ const styles = StyleSheet.create({
     paddingTop: 100,
   },
   image: {
-    width: 200,
-    height: 200,
+    width: 280,
+    height: 280,
     marginBottom: 40,
     resizeMode: "contain",
   },

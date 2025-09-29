@@ -94,37 +94,7 @@ export default function Profile() {
         </View>
       </View>
 
-      <View style={styles.menuSection}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>📚</Text>
-          <Text style={styles.menuText}>Riwayat Pembelajaran</Text>
-          <Text style={styles.menuArrow}>›</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>📊</Text>
-          <Text style={styles.menuText}>Progress Belajar</Text>
-          <Text style={styles.menuArrow}>›</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>⚙️</Text>
-          <Text style={styles.menuText}>Pengaturan</Text>
-          <Text style={styles.menuArrow}>›</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>❓</Text>
-          <Text style={styles.menuText}>Bantuan & FAQ</Text>
-          <Text style={styles.menuArrow}>›</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>ℹ️</Text>
-          <Text style={styles.menuText}>Tentang Aplikasi</Text>
-          <Text style={styles.menuArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
+      
 
       <TouchableOpacity 
         style={[styles.logoutButton, loading && styles.logoutButtonDisabled]} 
@@ -204,40 +174,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: fonts.sizes.caption,
     fontFamily: fonts.bodySemiBold, // Nunito SemiBold
-  },
-  menuSection: {
-    marginHorizontal: 20,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.background,
-  },
-  menuIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    width: 24,
-  },
-  menuText: {
-    flex: 1,
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.body, // Nunito Regular
-    color: colors.text,
-  },
-  menuArrow: {
-    fontSize: 18,
-    color: colors.muted,
-    fontFamily: fonts.body, // Nunito Regular
   },
   debugSection: {
     marginHorizontal: 20,
