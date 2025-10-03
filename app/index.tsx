@@ -1,12 +1,12 @@
+import { colors } from "@/constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { colors } from "@/constants/theme";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Index() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth(); // ✅ Hanya perlu ini
   const [destination, setDestination] = useState<string | null>(null);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
@@ -14,13 +14,15 @@ export default function Index() {
     if (!loading) {
       checkOnboardingStatus();
     }
-  }, [loading, isAuthenticated]);
+  }, [loading, isAuthenticated]); // ✅ Dependency yang tepat
 
   const checkOnboardingStatus = async () => {
     try {
       if (isAuthenticated) {
+        // ✅ User sudah login, langsung ke tabs
         setDestination("/(tabs)");
       } else {
+        // ✅ User belum login, cek onboarding
         const hasSeenOnboarding = await AsyncStorage.getItem("hasSeenOnboarding");
         if (hasSeenOnboarding === "true") {
           setDestination("/auth/login");
@@ -36,25 +38,25 @@ export default function Index() {
     }
   };
 
-  // Show loading while checking auth or onboarding status
+  // ✅ Show loading while auth context is loading
   if (loading || checkingOnboarding) {
     return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: "center", 
-        alignItems: "center", 
-        backgroundColor: colors.background 
+      <View style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: colors.background,
       }}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  // Redirect to determined destination
+  // ✅ Redirect based on auth state
   if (destination) {
     return <Redirect href={destination as any} />;
   }
 
-  // Fallback
+  // ✅ Fallback
   return <Redirect href="/onboarding" />;
 }

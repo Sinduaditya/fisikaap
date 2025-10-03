@@ -1,8 +1,8 @@
-// services/api.ts - Final Fixed Version
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
-
-const BASE_URL = 'http://192.168.41.114:8000/api';
+// const BASE_URL = 'http://192.168.41.158:8000/api';
+// const BASE_URL = 'http://192.168.56.1:8000/api';
+const BASE_URL = 'http://192.168.1.5:8000/api';
 
 export interface ApiResponse<T = any> {
   status: 'success' | 'error';
@@ -28,7 +28,7 @@ export interface PhysicsTopic {
   name: string;
   slug: string;
   subtitle: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   estimated_duration: number;
   icon: string;
   order_index: number;
@@ -88,10 +88,10 @@ export interface SimulationAttempt {
 }
 
 class ApiService {
-
   getBaseUrl(): string {
     return BASE_URL;
   }
+
   private async getAuthToken(): Promise<string | null> {
     try {
       return await AsyncStorage.getItem('userToken');
@@ -110,31 +110,56 @@ class ApiService {
     };
   }
 
+   private async clearExpiredToken(): Promise<void> {
+    try {
+      console.log('🧹 Clearing expired token data');
+      await AsyncStorage.multiRemove([
+        'userToken', 
+        'isLoggedIn', 
+        'userEmail', 
+        'userName',
+        'userData'
+      ]);
+    } catch (error) {
+      console.error('❌ Error clearing expired token:', error);
+    }
+  }
+
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     try {
-      // Check if response is ok first
       if (!response.ok) {
-        // Handle different status codes
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
 
         try {
           const errorData = await response.json();
           errorMessage = errorData.message || errorMessage;
 
-          // Handle 401 specifically
+          // ✅ Handle token expiry gracefully
           if (response.status === 401) {
-            await AsyncStorage.multiRemove(['userToken', 'isLoggedIn', 'userEmail', 'userName']);
-            Alert.alert('Session Expired', 'Please login again');
+            console.warn('🔑 Token expired or invalid:', errorMessage);
+            
+            // Clear expired token immediately
+            await this.clearExpiredToken();
+            
+            // ✅ Create specific error for token expiry
+            const tokenError = new Error('Token expired');
+            (tokenError as any).isTokenExpired = true;
+            throw tokenError;
           }
 
           throw new Error(errorMessage);
         } catch (jsonError) {
-          // If JSON parsing fails, throw with status text
+          // ✅ Still handle 401 even if JSON parsing fails
+          if (response.status === 401) {
+            await this.clearExpiredToken();
+            const tokenError = new Error('Authentication expired');
+            (tokenError as any).isTokenExpired = true;
+            throw tokenError;
+          }
           throw new Error(errorMessage);
         }
       }
 
-      // Try to parse JSON response
       try {
         const data = await response.json();
         return data;
@@ -165,7 +190,6 @@ class ApiService {
           ...headers,
           ...options.headers,
         },
-        timeout: 15000, // 15 second timeout
       });
 
       console.log(`📡 Response Status: ${response.status} ${response.statusText}`);
@@ -175,7 +199,6 @@ class ApiService {
     } catch (error) {
       console.error(`❌ API Error for ${endpoint}:`, error);
 
-      // Handle different types of errors
       if (error instanceof TypeError && error.message.includes('Network request failed')) {
         throw new Error('Unable to connect to server. Please check your internet connection.');
       } else if (error instanceof Error && error.message.includes('timeout')) {
@@ -188,12 +211,14 @@ class ApiService {
     }
   }
 
-  // Health Check
+  // ============= SESUAI ROUTE LIST =============
+
+  // ✅ GET|HEAD api/health
   async healthCheck(): Promise<ApiResponse> {
     return this.makeRequest('/health');
   }
 
-  // Authentication
+  // ✅ POST api/auth/register
   async register(name: string, email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
     return this.makeRequest('/auth/register', {
       method: 'POST',
@@ -201,6 +226,7 @@ class ApiService {
     });
   }
 
+  // ✅ POST api/auth/login
   async login(email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
     return this.makeRequest('/auth/login', {
       method: 'POST',
@@ -208,47 +234,97 @@ class ApiService {
     });
   }
 
+  // ✅ GET|HEAD api/auth/profile
   async getProfile(): Promise<ApiResponse<{ user: User }>> {
-    return this.makeRequest('/auth/profile');
+    try {
+      return await this.makeRequest('/auth/profile');
+    } catch (error: any) {
+      if (error.isTokenExpired) {
+        console.log('🔑 Profile request failed due to expired token');
+        // Don't throw error, let caller handle it gracefully
+        throw new Error('Session expired. Please login again.');
+      }
+      throw error;
+    }
   }
 
+  // ✅ POST api/auth/logout
   async logout(): Promise<ApiResponse> {
-    return this.makeRequest('/auth/logout', {
-      method: 'POST',
-    });
+    try {
+      const token = await this.getAuthToken();
+      
+      // ✅ If no token, consider logout successful
+      if (!token) {
+        console.log('✅ No token found, logout considered successful');
+        return {
+          status: 'success',
+          message: 'Logout successful (no token)',
+        };
+      }
+
+      return await this.makeRequest('/auth/logout', {
+        method: 'POST',
+      });
+    } catch (error: any) {
+      console.warn('⚠️ API logout failed:', error.message);
+      
+      // ✅ Even if API logout fails, clear local token
+      await this.clearExpiredToken();
+      
+      // ✅ Return success for logout (local cleanup is what matters)
+      return {
+        status: 'success',
+        message: 'Logout completed (local cleanup)',
+      };
+    }
   }
 
-  // User Data
+  // ✅ GET|HEAD api/user
   async getUser(): Promise<ApiResponse<{ user: User }>> {
     return this.makeRequest('/user');
   }
 
-  async getUserStats(): Promise<ApiResponse<{ stats: any }>> {
-    return this.makeRequest('/user/stats');
+  // ✅ GET|HEAD api/user/achievements
+  async getUserAchievements(): Promise<ApiResponse<{ achievements: any[] }>> {
+    return this.makeRequest('/user/achievements');
   }
 
+  // ✅ GET|HEAD api/user/progress
   async getUserProgress(): Promise<ApiResponse<{ progress: UserProgress[] }>> {
     return this.makeRequest('/user/progress');
   }
 
-  // Physics Topics
+  // ✅ GET|HEAD api/user/attempts
+  async getUserAttempts(): Promise<ApiResponse<{ attempts: SimulationAttempt[] }>> {
+    return this.makeRequest('/user/attempts');
+  }
+
+  // ✅ GET|HEAD api/topics
   async getTopics(): Promise<ApiResponse<{ topics: PhysicsTopic[] }>> {
     return this.makeRequest('/topics');
   }
 
+  // ✅ GET|HEAD api/topics/{slug}
   async getTopicBySlug(slug: string): Promise<ApiResponse<{ topic: PhysicsTopic }>> {
     return this.makeRequest(`/topics/${slug}`);
   }
 
-  // Simulation
+  // ✅ GET|HEAD api/topics/{slug}/questions
+  async getTopicQuestions(slug: string): Promise<ApiResponse<{ questions: SimulationQuestion[] }>> {
+    return this.makeRequest(`/topics/${slug}/questions`);
+  }
+
+  // ✅ GET|HEAD api/simulation/topics
   async getSimulationTopics(): Promise<ApiResponse<{ topics: PhysicsTopic[] }>> {
     return this.makeRequest('/simulation/topics');
   }
 
+  // ✅ GET|HEAD api/simulation/topics/{topicSlug}/question
   async getTopicQuestion(topicSlug: string): Promise<ApiResponse<{ question: SimulationQuestion }>> {
     return this.makeRequest(`/simulation/topics/${topicSlug}/question`);
   }
 
+  // ✅ POST api/simulation/questions/{questionId}/submit
   async submitAnswer(
     questionId: number,
     userAnswer: Record<string, any>,
@@ -265,37 +341,29 @@ class ApiService {
     });
   }
 
-  async getSimulationAttempts(perPage: number = 20): Promise<ApiResponse<{ attempts: any }>> {
-    return this.makeRequest(`/simulation/attempts?per_page=${perPage}`);
-  }
-
-  async getSimulationPerformance(): Promise<ApiResponse<{ performance: any }>> {
-    return this.makeRequest('/simulation/performance');
-  }
-
-  // Achievements
+  // ✅ GET|HEAD api/achievements
   async getAchievements(): Promise<ApiResponse<{ achievements: Achievement[] }>> {
     return this.makeRequest('/achievements');
   }
 
-  async getAvailableAchievements(): Promise<ApiResponse<{ available_achievements: Achievement[] }>> {
-    return this.makeRequest('/achievements/available');
-  }
-
-  // Leaderboard
-  async getLeaderboard(limit: number = 50): Promise<ApiResponse<{ leaderboard: any[], current_user_rank: number, current_user: any }>> {
-    return this.makeRequest(`/leaderboard?limit=${limit}`);
-  }
-
-  // Daily Challenges
+  // ✅ GET|HEAD api/challenges/daily
   async getDailyChallenge(): Promise<ApiResponse<{ challenge: any }>> {
     return this.makeRequest('/challenges/daily');
   }
 
-  // Test connection utility
+  // ✅ GET|HEAD api/challenges
+  async getChallenges(): Promise<ApiResponse<{ challenges: any[] }>> {
+    return this.makeRequest('/challenges');
+  }
+
+  // ============= UTILITY METHODS =============
+
   async testConnection(): Promise<{ success: boolean, message: string }> {
     try {
       console.log(`🧪 Testing connection to: ${BASE_URL}`);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const response = await fetch(`${BASE_URL}/health`, {
         method: 'GET',
@@ -303,8 +371,10 @@ class ApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        timeout: 10000,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = await response.json();
@@ -321,10 +391,15 @@ class ApiService {
     } catch (error) {
       console.error('Connection test failed:', error);
 
-      if (error instanceof TypeError && error.message.includes('Network request failed')) {
+      if (error instanceof Error && error.name === 'AbortError') {
         return {
           success: false,
-          message: `❌ Cannot connect to server.\n\nPlease check:\n• Server is running: php artisan serve --host=0.0.0.0 --port=8000\n• Your IP: ${BASE_URL}\n• Network connection\n• Firewall settings`
+          message: `❌ Connection timeout after 5 seconds.\nURL: ${BASE_URL}`
+        };
+      } else if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        return {
+          success: false,
+          message: `❌ Cannot connect to server.\n\nPlease check:\n• Server is running\n• Network connection\n• URL: ${BASE_URL}`
         };
       } else {
         return {
@@ -332,6 +407,22 @@ class ApiService {
           message: `❌ Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}\nURL: ${BASE_URL}`
         };
       }
+    }
+  }
+
+  async validateToken(): Promise<boolean> {
+    try {
+      const token = await this.getAuthToken();
+      if (!token) return false;
+
+      const response = await this.getProfile();
+      return response.status === 'success';
+    } catch (error: any) {
+      if (error.isTokenExpired || error.message.includes('Session expired')) {
+        return false;
+      }
+      console.warn('Token validation failed:', error);
+      return false;
     }
   }
 

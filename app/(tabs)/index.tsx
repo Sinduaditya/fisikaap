@@ -5,7 +5,6 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -29,47 +28,87 @@ interface UserStats {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   
   // State management
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [topics, setTopics] = useState<PhysicsTopic[]>([]);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [recentAttempts, setRecentAttempts] = useState<any[]>([]);
 
   // Load data on component mount
   useEffect(() => {
-    if (isAuthenticated) {
       loadDashboardData();
-    }
-  }, [isAuthenticated]);
+  }, []);
 
   const loadDashboardData = async () => {
-    if (!isAuthenticated) return;
+    if (!user) return;
     
     setLoading(true);
     try {
-      // Load topics and user stats in parallel
-      const [topicsResponse, statsResponse] = await Promise.all([
-        apiService.getTopics(),
-        apiService.getUserStats(),
+      // ✅ Gunakan API yang ada dari api.ts
+      const [topicsResponse, userResponse, attemptsResponse] = await Promise.all([
+        apiService.getTopics(),          // ✅ GET /api/topics
+        apiService.getUser(),            // ✅ GET /api/user  
+        apiService.getUserAttempts(),    // ✅ GET /api/user/attempts
       ]);
 
+      // Set topics dari API
       if (topicsResponse.status === 'success' && topicsResponse.data) {
-        setTopics(topicsResponse.data.topics);
+        setTopics(topicsResponse.data.topics || []);
+        console.log('✅ Loaded topics:', topicsResponse.data.topics.length);
       }
 
-      if (statsResponse.status === 'success' && statsResponse.data) {
-        setUserStats(statsResponse.data.stats);
+      // Set user data (karena /user/stats tidak ada, pakai user data)
+      if (userResponse.status === 'success' && userResponse.data) {
+        const userData = userResponse.data.user;
+        
+        // Create stats from user data
+        setUserStats({
+          total_xp: userData.total_xp || 0,
+          level: userData.level || 1,
+          streak_days: userData.streak_count || 0,
+          last_activity_date: userData.last_login_streak || '',
+          total_achievements: userData.achievements?.length || 0,
+          completed_topics: userData.progress?.filter(p => p.is_completed).length || 0,
+          total_attempts: 0, // Will be filled from attempts
+          correct_attempts: 0,
+          accuracy_rate: 0,
+          average_score: 0,
+        });
+        console.log('✅ Loaded user data:', userData.name);
+      }
+
+      // Set recent attempts
+      if (attemptsResponse.status === 'success' && attemptsResponse.data) {
+        const attempts = attemptsResponse.data.attempts || [];
+        setRecentAttempts(attempts.slice(0, 5)); // Latest 5 attempts
+        
+        // Update stats with attempts data
+        if (attempts.length > 0) {
+          const correctAttempts = attempts.filter((a: any) => a.is_correct).length;
+          const totalScore = attempts.reduce((sum: number, a: any) => sum + (a.score_earned || 0), 0);
+          
+          setUserStats(prev => prev ? {
+            ...prev,
+            total_attempts: attempts.length,
+            correct_attempts: correctAttempts,
+            accuracy_rate: Math.round((correctAttempts / attempts.length) * 100),
+            average_score: Math.round(totalScore / attempts.length),
+          } : null);
+        }
+        console.log('✅ Loaded attempts:', attempts.length);
       }
 
     } catch (error) {
-      console.error('Failed to load dashboard data:', error);
-      // Don't show error alert for home screen, just log it
+      console.error('❌ Failed to load dashboard data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+ 
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -78,6 +117,7 @@ export default function HomeScreen() {
   };
 
   const handleTopicPress = (topic: PhysicsTopic) => {
+    console.log('🔍 Topic pressed:', topic.name, topic.slug);
     // Navigate to simulation screen with topic slug
     router.push({
       pathname: '/simulasi/[slug]',
@@ -91,56 +131,13 @@ export default function HomeScreen() {
       const firstTopic = topics[0];
       handleTopicPress(firstTopic);
     } else {
-      // Fallback to general simulation screen
-      router.push('/simulasi');
+      // Fallback to topics page
+      router.push('/(tabs)/topics');
     }
   };
 
-  // Mock data for features if API data not available
-  const defaultFeatures = [
-    {
-      id: 1,
-      name: "Gaya Gesek",
-      subtitle: "Pelajari konsep gaya gesek dengan simulasi interaktif",
-      icon: "⚡",
-      color: "#FF6B6B",
-      difficulty: "beginner",
-      slug: "gaya-gesek"
-    },
-    {
-      id: 2,
-      name: "Gerak Parabola",
-      subtitle: "Eksplorasi gerak proyektil dan lintasan benda",
-      icon: "🌙",
-      color: "#4ECDC4",
-      difficulty: "intermediate",
-      slug: "gerak-parabola"
-    },
-    {
-      id: 3,
-      name: "Hukum Newton",
-      subtitle: "Memahami hukum-hukum dasar gerak benda",
-      icon: "🎯",
-      color: "#45B7D1",
-      difficulty: "beginner",
-      slug: "hukum-newton"
-    },
-    {
-      id: 4,
-      name: "Energi Kinetik",
-      subtitle: "Simulasi energi gerak dan transformasinya",
-      icon: "⚡",
-      color: "#96CEB4",
-      difficulty: "intermediate",
-      slug: "energi-kinetik"
-    }
-  ];
-
-  // Use API topics if available, otherwise use default features
-  const displayTopics = topics.length > 0 ? topics : defaultFeatures;
-
   const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
+    switch (difficulty.toLowerCase()) {
       case 'beginner': return '#10B981';
       case 'intermediate': return '#F59E0B';
       case 'advanced': return '#EF4444';
@@ -148,13 +145,13 @@ export default function HomeScreen() {
     }
   };
 
-  const getTopicIcon = (topic: any) => {
+  const getTopicIcon = (topic: PhysicsTopic) => {
     if (topic.icon) return topic.icon;
-    // Default icons based on topic name
-    if (topic.name?.includes('Gesek') || topic.slug?.includes('gesek')) return '⚡';
-    if (topic.name?.includes('Parabola') || topic.slug?.includes('parabola')) return '🌙';
-    if (topic.name?.includes('Newton') || topic.slug?.includes('newton')) return '🎯';
+    // Default icons based on topic name/slug
+    if (topic.name?.includes('Newton') || topic.slug?.includes('newton')) return '⚡';
     if (topic.name?.includes('Energi') || topic.slug?.includes('energi')) return '💫';
+    if (topic.name?.includes('Gesek') || topic.slug?.includes('gesek')) return '🔥';
+    if (topic.name?.includes('Momentum') || topic.slug?.includes('momentum')) return '🎯';
     return '🔬';
   };
 
@@ -162,25 +159,6 @@ export default function HomeScreen() {
     const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFA726', '#AB47BC'];
     return colors[index % colors.length];
   };
-
-  if (!isAuthenticated) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.authPrompt}>
-          <Text style={styles.authTitle}>🔐 Silakan Login</Text>
-          <Text style={styles.authMessage}>
-            Untuk mengakses fitur pembelajaran dan melacak progress Anda
-          </Text>
-          <TouchableOpacity 
-            style={styles.authButton} 
-            onPress={() => router.push('/auth/login')}
-          >
-            <Text style={styles.authButtonText}>Login</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <ScrollView 
@@ -205,10 +183,11 @@ export default function HomeScreen() {
             </Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-            <Image 
-              source={require("@/assets/icon/profile.png")} 
-              style={styles.avatar} 
-            />
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {user?.name?.charAt(0)?.toUpperCase() || '👤'}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -216,7 +195,7 @@ export default function HomeScreen() {
       {/* Hero Card */}
       <View style={styles.heroCard}>
         <View style={styles.heroContent}>
-          <Text style={styles.heroTitle}>🧪 PhysicsPlay</Text>
+          <Text style={styles.heroTitle}>PhysicsPlay</Text>
           <Text style={styles.heroDescription}>
             Eksplorasi dunia fisika melalui simulasi interaktif yang dirancang khusus untuk pembelajaran yang efektif dan menyenangkan.
           </Text>
@@ -233,14 +212,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Stats Cards - Show real data if available */}
+      {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>
-            {userStats ? userStats.completed_topics : displayTopics.length}+
+            {userStats ? userStats.completed_topics : topics.length}
           </Text>
           <Text style={styles.statLabel}>
-            {userStats ? 'Selesai' : 'Simulasi'}
+            {userStats ? 'Selesai' : 'Topics'}
           </Text>
         </View>
         <View style={styles.statCard}>
@@ -248,53 +227,48 @@ export default function HomeScreen() {
             {userStats ? `${userStats.accuracy_rate}%` : '100%'}
           </Text>
           <Text style={styles.statLabel}>
-            {userStats ? 'Akurasi' : 'Interaktif'}
+            Akurasi
           </Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>
-            {userStats ? `${userStats.streak_days}` : '24/7'}
+            {userStats ? `${userStats.streak_days}` : '0'}
           </Text>
           <Text style={styles.statLabel}>
-            {userStats ? 'Streak' : 'Akses'}
+            Streak
           </Text>
         </View>
       </View>
 
-      {/* Features Section */}
+      {/* Topics Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={styles.sectionTitle}>📚 Topik Pembelajaran</Text>
+            <Text style={styles.sectionTitle}>📚 Topik Terbaru</Text>
             <Text style={styles.sectionSubtitle}>
-              {topics.length > 0 ? 
-                'Pilih topik yang ingin kamu pelajari' : 
-                'Simulasi fisika interaktif tersedia'
-              }
+              Pilih topik yang ingin kamu pelajari
             </Text>
           </View>
-          {topics.length > 0 && (
-            <TouchableOpacity onPress={() => router.push('/(tabs)/topics')}>
-              <Text style={styles.seeAllText}>Lihat Semua</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={() => router.push('/(tabs)/topics')}>
+            <Text style={styles.seeAllText}>Lihat Semua</Text>
+          </TouchableOpacity>
         </View>
         
-        {loading && topics.length === 0 ? (
+        {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingText}>Memuat topik...</Text>
           </View>
         ) : (
           <View style={styles.featuresGrid}>
-            {displayTopics.slice(0, 4).map((topic, index) => (
+            {topics.slice(0, 3).map((topic, index) => (
               <TouchableOpacity 
-                key={topic.id || topic.slug} 
+                key={topic.id} 
                 style={[
                   styles.featureCard, 
                   { borderLeftColor: getTopicColor(index) }
                 ]}
-                onPress={() => handleTopicPress(topic as PhysicsTopic)}
+                onPress={() => handleTopicPress(topic)}
                 activeOpacity={0.8}
               >
                 <View style={styles.featureHeader}>
@@ -307,30 +281,28 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                   <View style={styles.featureHeaderRight}>
-                    {topic.difficulty && (
-                      <View style={[
-                        styles.difficultyBadge,
-                        { backgroundColor: getDifficultyColor(topic.difficulty) + "20" }
+                    <View style={[
+                      styles.difficultyBadge,
+                      { backgroundColor: getDifficultyColor(topic.difficulty) + "20" }
+                    ]}>
+                      <Text style={[
+                        styles.difficultyText,
+                        { color: getDifficultyColor(topic.difficulty) }
                       ]}>
-                        <Text style={[
-                          styles.difficultyText,
-                          { color: getDifficultyColor(topic.difficulty) }
-                        ]}>
-                          {topic.difficulty === 'beginner' ? 'Pemula' :
-                           topic.difficulty === 'intermediate' ? 'Menengah' : 'Lanjut'}
-                        </Text>
-                      </View>
-                    )}
+                        {topic.difficulty === 'Beginner' ? 'Pemula' :
+                         topic.difficulty === 'Intermediate' ? 'Menengah' : 'Lanjut'}
+                      </Text>
+                    </View>
                     <Text style={styles.featureArrow}>›</Text>
                   </View>
                 </View>
                 
                 <Text style={styles.featureTitle}>{topic.name}</Text>
                 <Text style={styles.featureDescription}>
-                  {topic.subtitle || topic.description || 'Simulasi fisika interaktif'}
+                  {topic.subtitle || 'Simulasi fisika interaktif'}
                 </Text>
                 
-                {/* Progress indicator for API topics */}
+                {/* Progress indicator */}
                 {topic.progress && (
                   <View style={styles.progressContainer}>
                     <View style={styles.progressBar}>
@@ -349,11 +321,54 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                 )}
+
+                <View style={styles.topicMeta}>
+                  <Text style={styles.topicDuration}>
+                    ⏱️ {topic.estimated_duration} min
+                  </Text>
+                  {topic.progress && (
+                    <Text style={styles.topicScore}>
+                      🏆 {topic.progress.best_score}/100
+                    </Text>
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
           </View>
         )}
       </View>
+
+      {/* Recent Activity */}
+      {recentAttempts.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📈 Aktivitas Terbaru</Text>
+          <View style={styles.activityList}>
+            {recentAttempts.slice(0, 3).map((attempt, index) => (
+              <View key={attempt.id || index} style={styles.activityItem}>
+                <View style={styles.activityIcon}>
+                  <Text style={styles.activityEmoji}>
+                    {attempt.is_correct ? '✅' : '❌'}
+                  </Text>
+                </View>
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>
+                    {attempt.question?.topic?.name || 'Simulasi'}
+                  </Text>
+                  <Text style={styles.activitySubtitle}>
+                    Skor: {attempt.score_earned} • {attempt.is_correct ? 'Benar' : 'Salah'}
+                  </Text>
+                </View>
+                <Text style={styles.activityTime}>
+                  {new Date(attempt.created_at).toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short'
+                  })}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* Quick Actions */}
       <View style={styles.section}>
@@ -372,14 +387,6 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
           
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/(tabs)/leaderboard')}
-          >
-            <Text style={styles.actionIcon}>📊</Text>
-            <Text style={styles.actionText}>Peringkat</Text>
-            <Text style={styles.actionSubtext}>Lihat ranking</Text>
-          </TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.actionButton}
@@ -397,7 +404,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Bottom Spacing */}
-      <View style={{ height: 100 }} />
+      <View style={{ height: 120 }} />
     </ScrollView>
   );
 }
@@ -444,16 +451,12 @@ const styles = StyleSheet.create({
   
   // Header Styles
   header: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.primary,
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
   },
   headerContent: {
     flexDirection: "row",
@@ -466,35 +469,42 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: fonts.sizes.title,
     fontFamily: fonts.title,
-    color: colors.primary,
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
-    color: colors.muted,
+    color: '#FFFFFF',
+    opacity: 0.9,
     maxWidth: "90%",
   },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    borderWidth: 2,
-    borderColor: colors.primary + "30",
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 20,
+    fontFamily: fonts.bodySemiBold,
+    color: colors.primary,
   },
 
   // Hero Card Styles
   heroCard: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.card,
     marginHorizontal: 20,
-    marginTop: -20,
+    marginTop: 20,
     borderRadius: 20,
     padding: 24,
     flexDirection: "row",
     alignItems: "center",
     elevation: 6,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.3,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
     shadowRadius: 12,
   },
   heroContent: {
@@ -504,19 +514,18 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: fonts.sizes.subtitle,
     fontFamily: fonts.title,
-    color: "#FFFFFF",
+    color: colors.primary,
     marginBottom: 8,
   },
   heroDescription: {
     fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
-    color: "#FFFFFF",
-    opacity: 0.9,
+    color: colors.muted,
     lineHeight: 20,
     marginBottom: 16,
   },
   heroButton: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
@@ -525,7 +534,7 @@ const styles = StyleSheet.create({
   heroButtonText: {
     fontSize: fonts.sizes.small,
     fontFamily: fonts.bodySemiBold,
-    color: colors.primary,
+    color: '#FFFFFF',
   },
   heroImageContainer: {
     alignItems: "center",
@@ -534,7 +543,7 @@ const styles = StyleSheet.create({
   heroImageBackground: {
     width: 80,
     height: 80,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.primary + "20",
     borderRadius: 40,
     alignItems: "center",
     justifyContent: "center",
@@ -596,9 +605,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   seeAllText: {
-    fontSize: fonts.sizes.small,
     fontFamily: fonts.bodySemiBold,
     color: colors.accent,
+    marginTop: 15,
   },
 
   // Loading Styles
@@ -673,11 +682,27 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: colors.muted,
     lineHeight: 18,
+    marginBottom: 12,
+  },
+  topicMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  topicDuration: {
+    fontSize: fonts.sizes.caption,
+    fontFamily: fonts.body,
+    color: colors.muted,
+  },
+  topicScore: {
+    fontSize: fonts.sizes.caption,
+    fontFamily: fonts.bodySemiBold,
+    color: colors.accent,
   },
 
   // Progress Styles
   progressContainer: {
-    marginTop: 12,
+    marginBottom: 12,
   },
   progressBar: {
     height: 4,
@@ -690,6 +715,50 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   progressText: {
+    fontSize: fonts.sizes.caption,
+    fontFamily: fonts.body,
+    color: colors.muted,
+  },
+
+  // Activity Styles
+  activityList: {
+    marginTop: 12,
+    gap: 12,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+  },
+  activityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  activityEmoji: {
+    fontSize: 18,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.bodySemiBold,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  activitySubtitle: {
+    fontSize: fonts.sizes.caption,
+    fontFamily: fonts.body,
+    color: colors.muted,
+  },
+  activityTime: {
     fontSize: fonts.sizes.caption,
     fontFamily: fonts.body,
     color: colors.muted,

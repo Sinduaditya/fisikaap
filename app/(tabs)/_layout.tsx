@@ -1,3 +1,4 @@
+import { AuthGuard } from "@/components/AuthGuard"; // ✅ Keep only ONE AuthGuard here
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { colors } from "@/constants/theme";
@@ -7,73 +8,113 @@ import { StyleSheet, View } from "react-native";
 
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{
-      headerShown: false,
-      tabBarActiveTintColor: colors.primary,
-      tabBarInactiveTintColor: colors.muted,
-      tabBarButton: HapticTab,
-      tabBarStyle: styles.tabBar,
-      tabBarShowLabel: false,
-      tabBarItemStyle: styles.tabItem,
-      }}
-    >
-      <Tabs.Screen
-      name="index"
-      options={{
+    <AuthGuard>
+      {/* ✅ Single AuthGuard protects ALL tabs */}
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.muted,
+          tabBarButton: HapticTab,
+          tabBarStyle: styles.tabBar,
+          tabBarShowLabel: true,
+          tabBarLabelStyle: styles.tabLabel,
+          tabBarItemStyle: styles.tabItem,
+        }}
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
         title: "Home",
         tabBarIcon: ({ color }) => (
-        <View style={styles.iconWrap}>
-          <IconSymbol size={28} name="house" color={color} />
-        </View>
+          <View style={styles.iconWrap}>
+            <IconSymbol size={24} name="house" color={color} />
+          </View>
         ),
-      }}
-      />
-      <Tabs.Screen
-      name="simulasi"
-      options={{
-        title: "Simulasi",
+          }}
+        />
+        <Tabs.Screen
+          name="topics"
+          options={{
+        title: "Topics",
         tabBarIcon: ({ color }) => (
-        <View style={styles.iconWrap}>
-          <IconSymbol size={28} name="atom" color={color} />
-        </View>
+            <View style={styles.iconWrap}>
+            <IconSymbol size={24} name="book" color={color} />
+            </View>
+          ),
+          }}
+        />
+        <Tabs.Screen
+          name="achievements"
+          options={{
+          title: "Achievement",
+          href: null, // This hides the tab from being displayed
+          tabBarIcon: ({ color }) => (
+            <View style={styles.iconWrap}>
+            <IconSymbol size={24} name="trophy" color={color} />
+            </View>
+          ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+          tabBarIcon: ({ color }) => (
+          <View style={styles.iconWrap}>
+            <IconSymbol size={24} name="person" color={color} />
+          </View>
         ),
-      }}
-      />
+          }}
+        />
       <Tabs.Screen
-      name="profile"
-      options={{
-        title: "Profil",
+        name="challenges"
+        options={{
+        title: "Challenges",
+        href: null, // This hides the tab from being displayed
         tabBarIcon: ({ color }) => (
-        <View style={styles.iconWrap}>
-          <IconSymbol size={28} name="person" color={color} />
-        </View>
+          <View style={styles.iconWrap}>
+          <IconSymbol size={24} name="target" color={color} />
+          </View>
         ),
-      }}
+        }}
       />
-    </Tabs>
+      </Tabs>
+    </AuthGuard>
   );
 }
 
 const styles = StyleSheet.create({
   tabBar: {
+    position: 'absolute',
+    bottom: 20,
     left: 20,
     right: 20,
-    height: 60,
+    marginRight: 20,
+    marginLeft: 20,
+    height: 70,
     backgroundColor: colors.card,
+    borderRadius: 20,
     borderTopWidth: 0,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: -2 },
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 12,
+    elevation: 8,
+    paddingBottom: 10,
+    paddingTop: 10,
   },
   tabItem: {
-    paddingVertical: 8,
+    paddingVertical: 4,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
   },
   iconWrap: {
     alignItems: "center",
     justifyContent: "center",
-    flex: 1,
+    marginBottom: 2,
   },
 });

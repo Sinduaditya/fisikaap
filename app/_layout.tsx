@@ -57,6 +57,8 @@ export default function RootLayout() {
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
         <Stack.Screen name="auth/register" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="simulasi" options={{ headerShown: false }} />
+        <Stack.Screen name="topics" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
   );
