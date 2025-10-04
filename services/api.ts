@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
-// const BASE_URL = 'http://192.168.41.158:8000/api';
-// const BASE_URL = 'http://192.168.56.1:8000/api';
+
 const BASE_URL = 'http://192.168.1.5:8000/api';
+
+// ============= INTERFACES SESUAI REQUIREMENT.TXT =============
 
 export interface ApiResponse<T = any> {
   status: 'success' | 'error';
@@ -11,81 +11,130 @@ export interface ApiResponse<T = any> {
   errors?: Record<string, string[]>;
 }
 
+// ✅ users table - FIXED field names sesuai requirement
 export interface User {
   id: number;
   name: string;
   email: string;
+  email_verified_at?: string;
   level: number;
   total_xp: number;
-  streak_count: number;
-  last_login_streak: string;
-  achievements?: Achievement[];
-  progress?: UserProgress[];
+  streak_days: number; // ✅ FIXED: streak_days bukan streak_count
+  last_activity_date?: string; // ✅ FIXED: last_activity_date bukan last_login_streak
+  created_at?: string;
+  updated_at?: string;
 }
 
+// ✅ physics_topics table - sesuai requirement
 export interface PhysicsTopic {
   id: number;
   name: string;
   slug: string;
   subtitle: string;
+  description?: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   estimated_duration: number;
-  icon: string;
+  icon?: string;
   order_index: number;
-  progress?: {
-    completed_questions: number;
-    total_questions: number;
-    best_score: number;
-    is_completed: boolean;
-    progress_percentage: number;
-  };
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
+// ✅ simulation_questions table - FIXED difficulty field
 export interface SimulationQuestion {
   id: number;
+  physics_topic_id: number;
   question_text: string;
   simulation_type: string;
   parameters: Record<string, any>;
   evaluation_criteria: Record<string, any>;
-  hints: string[];
+  hints?: string[]; // ✅ nullable
   max_score: number;
-}
-
-export interface Achievement {
-  id: number;
-  name: string;
-  description: string;
-  icon: string;
-  xp_reward: number;
-  criteria: Record<string, any>;
-  is_earned?: boolean;
-  earned_at?: string;
-}
-
-export interface UserProgress {
-  id: number;
-  physics_topic_id: number;
-  completed_questions: number;
-  total_questions: number;
-  best_score: number;
-  is_completed: boolean;
-  last_attempt_at: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced'; // ✅ ADDED missing field
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
   topic?: PhysicsTopic;
 }
 
+// ✅ achievements table - FIXED missing fields
+export interface Achievement {
+  id: number;
+  name: string;
+  slug: string; // ✅ ADDED missing field
+  description: string;
+  icon: string;
+  criteria: Record<string, any>;
+  xp_reward: number;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary'; // ✅ ADDED missing field
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// ✅ user_achievements table - sesuai requirement
+export interface UserAchievement {
+  id: number;
+  user_id: number;
+  achievement_id: number;
+  earned_at: string;
+  created_at?: string;
+  updated_at?: string;
+  achievement: Achievement;
+}
+
+// ✅ user_progress table - FIXED field names
+export interface UserProgress {
+  id: number;
+  user_id: number;
+  physics_topic_id: number;
+  completed_questions: number;
+  total_questions: number;
+  total_score: number; // ✅ ADDED missing field
+  best_score: number;
+  first_attempt_at?: string; // ✅ ADDED missing field
+  last_attempt_at?: string;
+  is_completed: boolean;
+  created_at?: string;
+  updated_at?: string;
+  topic?: PhysicsTopic;
+}
+
+// ✅ simulation_attempts table - FIXED field names
 export interface SimulationAttempt {
   id: number;
+  user_id: number;
   simulation_question_id: number;
   user_answer: Record<string, any>;
+  correct_answer: Record<string, any>; // ✅ ADDED missing field
   is_correct: boolean;
   score_earned: number;
   attempt_number: number;
-  time_taken: number;
+  time_taken?: number; // ✅ nullable dalam requirement
+  simulation_data?: Record<string, any>; // ✅ ADDED missing field
   created_at: string;
+  updated_at?: string;
   question?: {
+    id: number;
+    question_text: string;
     topic?: PhysicsTopic;
   };
 }
+
+// ✅ daily_challenges table - sesuai requirement
+export interface DailyChallenge {
+  id: number;
+  challenge_date: string;
+  simulation_question_id: number;
+  xp_multiplier: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  question?: SimulationQuestion;
+}
+
+// ============= API SERVICE CLASS =============
 
 class ApiService {
   getBaseUrl(): string {
@@ -110,7 +159,7 @@ class ApiService {
     };
   }
 
-   private async clearExpiredToken(): Promise<void> {
+  private async clearExpiredToken(): Promise<void> {
     try {
       console.log('🧹 Clearing expired token data');
       await AsyncStorage.multiRemove([
@@ -134,14 +183,9 @@ class ApiService {
           const errorData = await response.json();
           errorMessage = errorData.message || errorMessage;
 
-          // ✅ Handle token expiry gracefully
           if (response.status === 401) {
             console.warn('🔑 Token expired or invalid:', errorMessage);
-            
-            // Clear expired token immediately
             await this.clearExpiredToken();
-            
-            // ✅ Create specific error for token expiry
             const tokenError = new Error('Token expired');
             (tokenError as any).isTokenExpired = true;
             throw tokenError;
@@ -149,7 +193,6 @@ class ApiService {
 
           throw new Error(errorMessage);
         } catch (jsonError) {
-          // ✅ Still handle 401 even if JSON parsing fails
           if (response.status === 401) {
             await this.clearExpiredToken();
             const tokenError = new Error('Authentication expired');
@@ -211,14 +254,14 @@ class ApiService {
     }
   }
 
-  // ============= SESUAI ROUTE LIST =============
+  // ============= PUBLIC ROUTES (NO AUTH) =============
 
-  // ✅ GET|HEAD api/health
-  async healthCheck(): Promise<ApiResponse> {
+  // ✅ GET /health
+  async healthCheck(): Promise<ApiResponse<{ message: string; version: string; timestamp: string }>> {
     return this.makeRequest('/health');
   }
 
-  // ✅ POST api/auth/register
+  // ✅ POST /auth/register
   async register(name: string, email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
     return this.makeRequest('/auth/register', {
       method: 'POST',
@@ -226,7 +269,7 @@ class ApiService {
     });
   }
 
-  // ✅ POST api/auth/login
+  // ✅ POST /auth/login
   async login(email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
     return this.makeRequest('/auth/login', {
       method: 'POST',
@@ -234,26 +277,26 @@ class ApiService {
     });
   }
 
-  // ✅ GET|HEAD api/auth/profile
+  // ============= PROTECTED ROUTES (AUTH REQUIRED) =============
+
+  // ✅ GET /auth/profile
   async getProfile(): Promise<ApiResponse<{ user: User }>> {
     try {
       return await this.makeRequest('/auth/profile');
     } catch (error: any) {
       if (error.isTokenExpired) {
         console.log('🔑 Profile request failed due to expired token');
-        // Don't throw error, let caller handle it gracefully
         throw new Error('Session expired. Please login again.');
       }
       throw error;
     }
   }
 
-  // ✅ POST api/auth/logout
+  // ✅ POST /auth/logout
   async logout(): Promise<ApiResponse> {
     try {
       const token = await this.getAuthToken();
       
-      // ✅ If no token, consider logout successful
       if (!token) {
         console.log('✅ No token found, logout considered successful');
         return {
@@ -267,11 +310,7 @@ class ApiService {
       });
     } catch (error: any) {
       console.warn('⚠️ API logout failed:', error.message);
-      
-      // ✅ Even if API logout fails, clear local token
       await this.clearExpiredToken();
-      
-      // ✅ Return success for logout (local cleanup is what matters)
       return {
         status: 'success',
         message: 'Logout completed (local cleanup)',
@@ -279,80 +318,96 @@ class ApiService {
     }
   }
 
-  // ✅ GET|HEAD api/user
+  // ============= USER DATA ROUTES =============
+
+  // ✅ GET /user
   async getUser(): Promise<ApiResponse<{ user: User }>> {
     return this.makeRequest('/user');
   }
 
-  // ✅ GET|HEAD api/user/achievements
-  async getUserAchievements(): Promise<ApiResponse<{ achievements: any[] }>> {
+  // ✅ GET /user/achievements
+  async getUserAchievements(): Promise<ApiResponse<{ achievements: UserAchievement[] }>> {
     return this.makeRequest('/user/achievements');
   }
 
-  // ✅ GET|HEAD api/user/progress
+  // ✅ GET /user/progress
   async getUserProgress(): Promise<ApiResponse<{ progress: UserProgress[] }>> {
     return this.makeRequest('/user/progress');
   }
 
-  // ✅ GET|HEAD api/user/attempts
+  // ✅ GET /user/attempts
   async getUserAttempts(): Promise<ApiResponse<{ attempts: SimulationAttempt[] }>> {
     return this.makeRequest('/user/attempts');
   }
 
-  // ✅ GET|HEAD api/topics
-  async getTopics(): Promise<ApiResponse<{ topics: PhysicsTopic[] }>> {
-    return this.makeRequest('/topics');
-  }
+  // ============= SIMULATION ROUTES =============
 
-  // ✅ GET|HEAD api/topics/{slug}
-  async getTopicBySlug(slug: string): Promise<ApiResponse<{ topic: PhysicsTopic }>> {
-    return this.makeRequest(`/topics/${slug}`);
-  }
-
-  // ✅ GET|HEAD api/topics/{slug}/questions
-  async getTopicQuestions(slug: string): Promise<ApiResponse<{ questions: SimulationQuestion[] }>> {
-    return this.makeRequest(`/topics/${slug}/questions`);
-  }
-
-  // ✅ GET|HEAD api/simulation/topics
+  // ✅ GET /simulation/topics
   async getSimulationTopics(): Promise<ApiResponse<{ topics: PhysicsTopic[] }>> {
     return this.makeRequest('/simulation/topics');
   }
 
-  // ✅ GET|HEAD api/simulation/topics/{topicSlug}/question
+  // ✅ GET /simulation/topics/{topicSlug}/question
   async getTopicQuestion(topicSlug: string): Promise<ApiResponse<{ question: SimulationQuestion }>> {
     return this.makeRequest(`/simulation/topics/${topicSlug}/question`);
   }
 
-  // ✅ POST api/simulation/questions/{questionId}/submit
+  // ✅ POST /simulation/questions/{questionId}/submit
   async submitAnswer(
     questionId: number,
     userAnswer: Record<string, any>,
     timeTaken: number,
-    simulationData: Record<string, any>
-  ): Promise<ApiResponse<{ is_correct: boolean, score_earned: number, total_xp: number, feedback: any }>> {
+    simulationData?: Record<string, any>
+  ): Promise<ApiResponse<{ 
+    is_correct: boolean; 
+    score_earned: number; 
+    total_xp: number; 
+    feedback: any;
+    attempt: SimulationAttempt;
+  }>> {
     return this.makeRequest(`/simulation/questions/${questionId}/submit`, {
       method: 'POST',
       body: JSON.stringify({
         user_answer: userAnswer,
         time_taken: timeTaken,
-        simulation_data: simulationData,
+        simulation_data: simulationData || {},
       }),
     });
   }
 
-  // ✅ GET|HEAD api/achievements
+  // ============= PHYSICS TOPICS ROUTES =============
+
+  // ✅ GET /topics
+  async getTopics(): Promise<ApiResponse<{ topics: PhysicsTopic[] }>> {
+    return this.makeRequest('/topics');
+  }
+
+  // ✅ GET /topics/{slug}
+  async getTopicBySlug(slug: string): Promise<ApiResponse<{ topic: PhysicsTopic }>> {
+    return this.makeRequest(`/topics/${slug}`);
+  }
+
+  // ✅ GET /topics/{slug}/questions
+  async getTopicQuestions(slug: string): Promise<ApiResponse<{ questions: SimulationQuestion[] }>> {
+    return this.makeRequest(`/topics/${slug}/questions`);
+  }
+
+  // ============= ACHIEVEMENTS ROUTES =============
+
+  // ✅ GET /achievements
   async getAchievements(): Promise<ApiResponse<{ achievements: Achievement[] }>> {
     return this.makeRequest('/achievements');
   }
 
-  // ✅ GET|HEAD api/challenges/daily
-  async getDailyChallenge(): Promise<ApiResponse<{ challenge: any }>> {
+  // ============= DAILY CHALLENGES ROUTES =============
+
+  // ✅ GET /challenges/daily
+  async getDailyChallenge(): Promise<ApiResponse<{ challenge: DailyChallenge | null }>> {
     return this.makeRequest('/challenges/daily');
   }
 
-  // ✅ GET|HEAD api/challenges
-  async getChallenges(): Promise<ApiResponse<{ challenges: any[] }>> {
+  // ✅ GET /challenges
+  async getChallenges(): Promise<ApiResponse<{ challenges: DailyChallenge[] }>> {
     return this.makeRequest('/challenges');
   }
 
@@ -423,83 +478,6 @@ class ApiService {
       }
       console.warn('Token validation failed:', error);
       return false;
-    }
-  }
-
-  // Mock methods for offline development
-  async mockLogin(email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    if (email === 'admin@test.com' && password === 'password123') {
-      const mockUser: User = {
-        id: 1,
-        name: 'Test User',
-        email: 'admin@test.com',
-        level: 5,
-        total_xp: 1250,
-        streak_count: 3,
-        last_login_streak: new Date().toISOString(),
-      };
-
-      return {
-        status: 'success',
-        message: 'Login successful',
-        data: {
-          user: mockUser,
-          token: 'mock-jwt-token-' + Date.now(),
-        },
-      };
-    } else {
-      throw new Error('Invalid credentials. Use: admin@test.com / password123');
-    }
-  }
-
-  async mockRegister(name: string, email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const mockUser: User = {
-      id: Date.now(),
-      name,
-      email,
-      level: 1,
-      total_xp: 0,
-      streak_count: 0,
-      last_login_streak: new Date().toISOString(),
-    };
-
-    return {
-      status: 'success',
-      message: 'Registration successful',
-      data: {
-        user: mockUser,
-        token: 'mock-jwt-token-' + Date.now(),
-      },
-    };
-  }
-
-  // Login with automatic fallback to mock
-  async loginWithFallback(email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
-    try {
-      return await this.login(email, password);
-    } catch (error) {
-      console.warn('🔄 Real API failed, trying mock login:', error);
-      Alert.alert(
-        'Using Demo Mode',
-        'Real API unavailable. Demo credentials:\n• Email: admin@test.com\n• Password: password123',
-        [{ text: 'OK' }]
-      );
-      return await this.mockLogin(email, password);
-    }
-  }
-
-  // Register with automatic fallback to mock
-  async registerWithFallback(name: string, email: string, password: string): Promise<ApiResponse<{ user: User, token: string }>> {
-    try {
-      return await this.register(name, email, password);
-    } catch (error) {
-      console.warn('🔄 Real API failed, using mock registration:', error);
-      Alert.alert('Demo Mode', 'Real API unavailable. Using demo registration.');
-      return await this.mockRegister(name, email, password);
     }
   }
 }

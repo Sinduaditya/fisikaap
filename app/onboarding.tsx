@@ -3,13 +3,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-  Dimensions,
-  FlatList,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    FlatList,
+    Image,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const { width } = Dimensions.get("window");
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   skipText: {
     color: colors.muted,
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     fontWeight: "600", // Explicit font weight
   },
   slide: {

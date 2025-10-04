@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
   authButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
 
   // Header
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
   },
   dailyTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.accent,
     marginBottom: 2,
   },
@@ -842,7 +842,7 @@ const styles = StyleSheet.create({
   },
   rewardText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
   completedBanner: {
@@ -854,7 +854,7 @@ const styles = StyleSheet.create({
   },
   completedBannerText: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: '#FFFFFF',
   },
 
@@ -878,7 +878,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.muted,
   },
   filterTextActive: {
@@ -952,7 +952,7 @@ const styles = StyleSheet.create({
   },
   difficultyText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   xpReward: {
     flexDirection: 'row',
@@ -968,12 +968,12 @@ const styles = StyleSheet.create({
   },
   xpText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
   challengeTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
     marginBottom: 6,
   },

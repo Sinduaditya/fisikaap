@@ -4,14 +4,14 @@ import { apiService, PhysicsTopic, SimulationQuestion } from '@/services/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 export default function TopicDetailScreen() {
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
   authButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
 
   // Loading & Error
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
   backIcon: {
     fontSize: 20,
     color: '#FFFFFF',
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   headerTitle: {
     fontSize: fonts.sizes.subtitle,
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   },
   difficultyText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   topicTitle: {
     fontSize: fonts.sizes.title,
@@ -688,12 +688,12 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.text,
   },
   progressPercentage: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
   progressBar: {
@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: '#FFFFFF',
   },
 
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
   },
   questionNumberText: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: '#FFFFFF',
   },
   questionMeta: {
@@ -836,7 +836,7 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.accent,
   },
 

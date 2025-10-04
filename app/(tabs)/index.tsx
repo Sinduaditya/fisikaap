@@ -16,8 +16,8 @@ import {
 interface UserStats {
   total_xp: number;
   level: number;
-  streak_days: number;
-  last_activity_date: string;
+  streak_days: number; // ✅ FIXED: streak_days bukan streak_count
+  last_activity_date: string; // ✅ FIXED: last_activity_date bukan last_login_streak
   total_achievements: number;
   completed_topics: number;
   total_attempts: number;
@@ -60,18 +60,18 @@ export default function HomeScreen() {
         console.log('✅ Loaded topics:', topicsResponse.data.topics.length);
       }
 
-      // Set user data (karena /user/stats tidak ada, pakai user data)
+      // ✅ FIXED: Set user data dengan field names yang benar
       if (userResponse.status === 'success' && userResponse.data) {
         const userData = userResponse.data.user;
         
-        // Create stats from user data
+        // Create stats from user data - FIXED field references
         setUserStats({
           total_xp: userData.total_xp || 0,
           level: userData.level || 1,
-          streak_days: userData.streak_count || 0,
-          last_activity_date: userData.last_login_streak || '',
-          total_achievements: userData.achievements?.length || 0,
-          completed_topics: userData.progress?.filter(p => p.is_completed).length || 0,
+          streak_days: userData.streak_days || 0, // ✅ FIXED: streak_days
+          last_activity_date: userData.last_activity_date || '', // ✅ FIXED: last_activity_date
+          total_achievements: 0, // Will be filled from attempts data
+          completed_topics: 0, // Will be filled from attempts data
           total_attempts: 0, // Will be filled from attempts
           correct_attempts: 0,
           accuracy_rate: 0,
@@ -108,8 +108,6 @@ export default function HomeScreen() {
     }
   };
 
- 
-
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadDashboardData();
@@ -120,7 +118,7 @@ export default function HomeScreen() {
     console.log('🔍 Topic pressed:', topic.name, topic.slug);
     // Navigate to simulation screen with topic slug
     router.push({
-      pathname: '/simulasi/[slug]',
+      pathname: '/topics/[slug]',
       params: { slug: topic.slug }
     });
   };
@@ -302,35 +300,12 @@ export default function HomeScreen() {
                   {topic.subtitle || 'Simulasi fisika interaktif'}
                 </Text>
                 
-                {/* Progress indicator */}
-                {topic.progress && (
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressBar}>
-                      <View 
-                        style={[
-                          styles.progressFill,
-                          { 
-                            width: `${topic.progress.progress_percentage}%`,
-                            backgroundColor: getTopicColor(index)
-                          }
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.progressText}>
-                      {topic.progress.progress_percentage}% selesai
-                    </Text>
-                  </View>
-                )}
+                {/* Progress indicator - removed since progress is not in PhysicsTopic interface */}
 
                 <View style={styles.topicMeta}>
                   <Text style={styles.topicDuration}>
                     ⏱️ {topic.estimated_duration} min
                   </Text>
-                  {topic.progress && (
-                    <Text style={styles.topicScore}>
-                      🏆 {topic.progress.best_score}/100
-                    </Text>
-                  )}
                 </View>
               </TouchableOpacity>
             ))}
@@ -387,7 +362,6 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
           
-          
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={() => router.push('/(tabs)/profile')}
@@ -409,44 +383,11 @@ export default function HomeScreen() {
   );
 }
 
+// ✅ All styles remain the same - removing progress-related styles that are not used
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  
-  // Auth Prompt Styles
-  authPrompt: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  authTitle: {
-    fontSize: fonts.sizes.title,
-    fontFamily: fonts.title,
-    color: colors.primary,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  authMessage: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
-    color: colors.muted,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  authButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  authButtonText: {
-    color: '#FFFFFF',
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
   },
   
   // Header Styles
@@ -489,7 +430,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 20,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
 
@@ -533,7 +474,7 @@ const styles = StyleSheet.create({
   },
   heroButtonText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: '#FFFFFF',
   },
   heroImageContainer: {
@@ -605,7 +546,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   seeAllText: {
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.accent,
     marginTop: 15,
   },
@@ -664,7 +605,7 @@ const styles = StyleSheet.create({
   },
   difficultyText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   featureArrow: {
     fontSize: 24,
@@ -696,28 +637,8 @@ const styles = StyleSheet.create({
   },
   topicScore: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.accent,
-  },
-
-  // Progress Styles
-  progressContainer: {
-    marginBottom: 12,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: colors.muted + "30",
-    borderRadius: 2,
-    marginBottom: 4,
-  },
-  progressFill: {
-    height: 4,
-    borderRadius: 2,
-  },
-  progressText: {
-    fontSize: fonts.sizes.caption,
     fontFamily: fonts.body,
-    color: colors.muted,
+    color: colors.accent,
   },
 
   // Activity Styles
@@ -749,7 +670,7 @@ const styles = StyleSheet.create({
   },
   activityTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.text,
     marginBottom: 2,
   },
@@ -787,7 +708,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
     marginBottom: 2,
   },

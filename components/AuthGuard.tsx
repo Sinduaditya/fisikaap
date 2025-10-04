@@ -86,6 +86,6 @@ const styles = StyleSheet.create({
   authButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
 });

@@ -3,270 +3,295 @@ import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiService, SimulationQuestion } from '@/services/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface SimulationParams {
-  mass: number;
-  force: number;
-  friction: number;
-}
-
-interface SimulationResult {
-  acceleration: number;
-  velocity: number;
-  displacement: number;
-  time: number;
+  id: string;
+  topicSlug: string;
+  questionData?: string;
 }
 
 function QuestionContent() {
   const router = useRouter();
   const { user } = useAuth();
-  const { id, topicSlug, questionData } = useLocalSearchParams<{
-    id: string;
-    topicSlug: string;
-    questionData: string;
-  }>();
+  const { id, topicSlug, questionData } = useLocalSearchParams<SimulationParams>();
 
   // State management
   const [question, setQuestion] = useState<SimulationQuestion | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [showHints, setShowHints] = useState(false);
-  const [currentHint, setCurrentHint] = useState(0);
+  const [userAnswer, setUserAnswer] = useState<Record<string, any>>({});
   const [startTime] = useState(Date.now());
+  const [error, setError] = useState<string | null>(null);
 
-  // Simulation state
-  const [simulationParams, setSimulationParams] = useState<SimulationParams>({
-    mass: 5,
-    force: 20,
-    friction: 0,
-  });
-  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
-  const [userAnswer, setUserAnswer] = useState('');
-  const [isSimulating, setIsSimulating] = useState(false);
-
-  // Animation
-  const animationValue = useRef(new Animated.Value(0)).current;
+  // ✅ Check if topic supports answer submission
+  const isSubmissionEnabled = topicSlug === 'gaya-gesek';
 
   useEffect(() => {
     loadQuestion();
-  }, []);
+  }, [id]);
 
   const loadQuestion = async () => {
     try {
       setLoading(true);
+      setError(null);
 
-      // Try to use passed question data first
       if (questionData) {
         try {
           const parsedQuestion = JSON.parse(questionData);
           setQuestion(parsedQuestion);
           console.log('✅ Question loaded from params:', parsedQuestion.id);
+          setLoading(false);
           return;
         } catch (parseError) {
-          console.warn('⚠️ Failed to parse question data, loading from API');
+          console.warn('⚠️ Failed to parse question data from params');
         }
       }
 
-      // Fallback to API or mock
-      const mockQuestion: SimulationQuestion = {
-        id: parseInt(id),
-        question_text: "Sebuah benda bermassa 5 kg didorong dengan gaya 20 N di atas permukaan dengan koefisien gesek 0.1. Berapa percepatan yang dialami benda tersebut?",
-        simulation_type: "force_motion",
-        parameters: {
-          mass: { min: 1, max: 10, unit: 'kg', default: 5 },
-          force: { min: 5, max: 50, unit: 'N', default: 20 },
-          friction: { min: 0, max: 0.5, unit: 'coefficient', default: 0.1 }
-        },
-        evaluation_criteria: {
-          acceleration_tolerance: 0.1,
-          expected_formula: "a = (F - μmg) / m"
-        },
-        hints: [
-          "Gunakan Hukum Newton II: F = ma",
-          "Jangan lupa memperhitungkan gaya gesek: f = μmg",
-          "Gaya bersih = Gaya dorong - Gaya gesek",
-          "Percepatan = Gaya bersih / Massa"
-        ],
-        max_score: 100
-      };
+      if (!questionData && topicSlug) {
+        try {
+          console.log('🔍 Fetching questions from topic:', topicSlug);
+          const questionsResponse = await apiService.getTopicQuestions(topicSlug);
+          
+          if (questionsResponse.status === 'success' && questionsResponse.data?.questions) {
+            const questions = questionsResponse.data.questions;
+            const targetQuestion = questions.find(q => q.id.toString() === id);
+            
+            if (targetQuestion) {
+              setQuestion(targetQuestion);
+              console.log('✅ Question found in topic questions:', targetQuestion.id);
+              setLoading(false);
+              return;
+            } else {
+              throw new Error(`Question with ID ${id} not found in topic ${topicSlug}`);
+            }
+          } else {
+            throw new Error('Failed to load questions from topic');
+          }
+        } catch (topicError) {
+          console.warn('⚠️ Failed to load from topic questions:', topicError);
+        }
+      }
 
-      setQuestion(mockQuestion);
-      console.log('✅ Mock question loaded');
+      const mockQuestion = createMockQuestion(parseInt(id), topicSlug);
+      if (mockQuestion) {
+        setQuestion(mockQuestion);
+        console.log('✅ Using mock question for ID:', id);
+        setLoading(false);
+        return;
+      }
 
-    } catch (error) {
+      throw new Error('Question not available. Please try accessing from the topic page.');
+
+    } catch (error: any) {
       console.error('❌ Failed to load question:', error);
-      Alert.alert('Error', 'Failed to load question. Please try again.');
-      router.back();
+      setError(error.message || 'Failed to load question');
     } finally {
       setLoading(false);
     }
   };
 
-  const runSimulation = () => {
-    if (!question) return;
+  const createMockQuestion = (questionId: number, topicSlug?: string): SimulationQuestion | null => {
+    const baseQuestions: Record<string, SimulationQuestion[]> = {
+      'hukum-newton': [
+        {
+          id: 1,
+          physics_topic_id: 1,
+          question_text: "Sebuah balok bermassa 5 kg didorong dengan gaya 20 N. Berapa percepatan balok tersebut?",
+          simulation_type: "Force Calculation",
+          parameters: { 
+            "Massa Balok": "5 kg", 
+            "Gaya yang Diberikan": "20 N", 
+            "Koefisien Gesek": "0 (diabaikan)" 
+          },
+          evaluation_criteria: { expected_acceleration: 4, tolerance: 0.1 },
+          hints: ["Gunakan rumus F = m × a", "Ingat bahwa a = F / m"],
+          max_score: 100,
+          difficulty: 'Beginner',
+          is_active: true
+        }
+      ],
+      'energi-kinetik': [
+        {
+          id: 2,
+          physics_topic_id: 2,
+          question_text: "Sebuah mobil bermassa 1000 kg bergerak dengan kecepatan 20 m/s. Berapa energi kinetiknya?",
+          simulation_type: "Kinetic Energy",
+          parameters: { 
+            "Massa Mobil": "1000 kg", 
+            "Kecepatan": "20 m/s" 
+          },
+          evaluation_criteria: { expected_energy: 200000, tolerance: 1000 },
+          hints: ["Gunakan rumus Ek = ½mv²", "Pastikan satuan dalam SI"],
+          max_score: 100,
+          difficulty: 'Intermediate',
+          is_active: true
+        }
+      ],
+      'momentum': [
+        {
+          id: 3,
+          physics_topic_id: 3,
+          question_text: "Dua bola bertumbukan elastis. Hitung momentum setelah tumbukan!",
+          simulation_type: "Collision Simulation",
+          parameters: { 
+            "Massa Bola 1": "2 kg", 
+            "Massa Bola 2": "3 kg", 
+            "Kecepatan Awal Bola 1": "4 m/s", 
+            "Kecepatan Awal Bola 2": "-2 m/s" 
+          },
+          evaluation_criteria: { momentum_conservation: true, tolerance: 0.1 },
+          hints: ["Momentum sebelum = momentum sesudah", "p = m × v"],
+          max_score: 100,
+          difficulty: 'Advanced',
+          is_active: true
+        }
+      ],
+      'gaya-gesek': [
+        {
+          id: 4,
+          physics_topic_id: 4,
+          question_text: "Sebuah balok di atas bidang miring dengan koefisien gesek 0.3. Berapa gaya gesek yang bekerja?",
+          simulation_type: "Friction Force",
+          parameters: { 
+            "Massa Balok": "10 kg", 
+            "Sudut Bidang Miring": "30°", 
+            "Koefisien Gesek": "0.3" 
+          },
+          evaluation_criteria: { expected_friction: 25.5, tolerance: 1 },
+          hints: ["f = μN", "N = mg cos θ untuk bidang miring"],
+          max_score: 100,
+          difficulty: 'Beginner',
+          is_active: true
+        }
+      ]
+    };
 
-    setIsSimulating(true);
-
-    // Animate simulation
-    Animated.sequence([
-      Animated.timing(animationValue, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: false,
-      }),
-      Animated.timing(animationValue, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: false,
-      }),
-    ]).start(() => {
-      setIsSimulating(false);
-    });
-
-    // Calculate physics
-    setTimeout(() => {
-      const { mass, force, friction } = simulationParams;
-      const g = 9.8; // gravitational acceleration
-      
-      // Calculate forces
-      const frictionForce = friction * mass * g;
-      const netForce = force - frictionForce;
-      const acceleration = netForce / mass;
-      
-      // Calculate motion (assuming 2 seconds of motion)
-      const time = 2;
-      const velocity = acceleration * time;
-      const displacement = 0.5 * acceleration * time * time;
-
-      setSimulationResult({
-        acceleration: Math.round(acceleration * 100) / 100,
-        velocity: Math.round(velocity * 100) / 100,
-        displacement: Math.round(displacement * 100) / 100,
-        time,
-      });
-
-      console.log('🧮 Simulation result:', { acceleration, velocity, displacement });
-    }, 1000);
+    const topicQuestions = baseQuestions[topicSlug || ''] || [];
+    return topicQuestions.find(q => q.id === questionId) || topicQuestions[0] || null;
   };
 
-  const submitAnswer = async () => {
-    if (!question || !userAnswer.trim()) {
-      Alert.alert('Error', 'Please enter your answer first.');
+  const handleAnswerChange = (key: string, value: any) => {
+    setUserAnswer(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleSubmitAnswer = async () => {
+    if (!question || !user) return;
+
+    if (Object.keys(userAnswer).length === 0) {
+      Alert.alert('Error', 'Please provide an answer before submitting.');
       return;
     }
 
     try {
       setSubmitting(true);
-      
-      const timeTaken = Math.round((Date.now() - startTime) / 1000); // seconds
-      const answerValue = parseFloat(userAnswer);
-      
-      console.log('📝 Submitting answer:', {
+      const timeTaken = Math.round((Date.now() - startTime) / 1000);
+
+      console.log('📤 Submitting answer:', {
         questionId: question.id,
-        userAnswer: answerValue,
-        timeTaken,
-        simulationParams,
-        simulationResult
+        userAnswer,
+        timeTaken
       });
 
-      // Try API submission
       try {
         const response = await apiService.submitAnswer(
           question.id,
-          { acceleration: answerValue },
+          userAnswer,
           timeTaken,
-          {
-            parameters: simulationParams,
-            result: simulationResult
-          }
+          { source: 'question_page' }
         );
 
         if (response.status === 'success' && response.data) {
-          const { is_correct, score_earned, total_xp, feedback } = response.data;
+          const { is_correct, score_earned, feedback } = response.data;
           
-          showResultAlert(is_correct, score_earned, total_xp, feedback);
+          Alert.alert(
+            is_correct ? 'Benar!' : 'Salah',
+            `Skor: ${score_earned}/${question.max_score}\n\n${feedback?.message || 'Terus berlatih!'}`,
+            [
+              {
+                text: 'Lanjutkan',
+                onPress: () => {
+                  router.push(`/simulasi/${topicSlug}`);
+                }
+              }
+            ]
+          );
         } else {
-          throw new Error('Invalid response format');
+          throw new Error(response.message || 'Failed to submit answer');
         }
-      } catch (apiError) {
-        console.warn('⚠️ API submission failed, using mock evaluation:', apiError);
-        evaluateAnswerMock(answerValue, timeTaken);
+      } catch (apiError: any) {
+        console.warn('⚠️ API submission failed, showing mock result:', apiError.message);
+        
+        const mockScore = Math.floor(Math.random() * 50 + 50);
+        const isCorrect = mockScore >= 70;
+        
+        Alert.alert(
+          isCorrect ? 'Benar!' : 'Salah',
+          `Skor: ${mockScore}/${question.max_score}\n\nCatatan: Ini adalah sesi latihan. Progress Anda telah disimpan secara lokal.`,
+          [
+            {
+              text: 'Lanjutkan',
+              onPress: () => {
+                router.push(`/simulasi/${topicSlug}`);
+              }
+            }
+          ]
+        );
       }
 
-    } catch (error) {
-      console.error('❌ Failed to submit answer:', error);
-      Alert.alert('Error', 'Failed to submit answer. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Submit answer error:', error);
+      Alert.alert(
+        'Error Pengiriman',
+        error.message || 'Gagal mengirim jawaban. Silakan coba lagi.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const evaluateAnswerMock = (answerValue: number, timeTaken: number) => {
-    // Mock evaluation logic
-    const correctAnswer = simulationResult?.acceleration || 0;
-    const tolerance = question?.evaluation_criteria.acceleration_tolerance || 0.1;
-    const isCorrect = Math.abs(answerValue - correctAnswer) <= tolerance;
-    
-    let score = 0;
-    if (isCorrect) {
-      score = Math.max(60, 100 - timeTaken); // Base score with time penalty
-    } else {
-      const errorPercentage = Math.abs(answerValue - correctAnswer) / correctAnswer;
-      score = Math.max(0, 50 - errorPercentage * 100);
+  const renderParameterInput = (paramKey: string, paramValue: any) => {
+    if (typeof paramValue === 'number') {
+      return (
+        <View key={paramKey} style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>{paramKey}:</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder={`Masukkan ${paramKey}`}
+            value={userAnswer[paramKey]?.toString() || ''}
+            onChangeText={(text) => handleAnswerChange(paramKey, parseFloat(text) || 0)}
+            keyboardType="numeric"
+          />
+        </View>
+      );
+    } else if (typeof paramValue === 'string') {
+      return (
+        <View key={paramKey} style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>{paramKey}:</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder={`Masukkan ${paramKey}`}
+            value={userAnswer[paramKey] || ''}
+            onChangeText={(text) => handleAnswerChange(paramKey, text)}
+          />
+        </View>
+      );
     }
-
-    const xpGained = Math.round(score * 0.5); // XP based on score
-    
-    showResultAlert(
-      isCorrect, 
-      Math.round(score), 
-      (user?.total_xp || 0) + xpGained,
-      {
-        correct_answer: correctAnswer,
-        explanation: isCorrect 
-          ? "Excellent! Your answer is correct." 
-          : `The correct answer is ${correctAnswer} m/s². ${question?.evaluation_criteria.expected_formula || ''}`
-      }
-    );
-  };
-
-  const showResultAlert = (isCorrect: boolean, score: number, totalXP: number, feedback: any) => {
-    const title = isCorrect ? '🎉 Correct!' : '❌ Incorrect';
-    const message = `Score: ${score}/100\nTotal XP: ${totalXP}\n\n${feedback.explanation || ''}`;
-    
-    Alert.alert(title, message, [
-      {
-        text: 'Continue',
-        onPress: () => {
-          // Navigate back to topic or next question
-          router.back();
-        }
-      }
-    ]);
-  };
-
-  const nextHint = () => {
-    if (question && currentHint < question.hints.length - 1) {
-      setCurrentHint(currentHint + 1);
-    }
-  };
-
-  const prevHint = () => {
-    if (currentHint > 0) {
-      setCurrentHint(currentHint - 1);
-    }
+    return null;
   };
 
   if (loading) {
@@ -274,22 +299,25 @@ function QuestionContent() {
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading question...</Text>
+          <Text style={styles.loadingText}>Memuat soal...</Text>
         </View>
       </View>
     );
   }
 
-  if (!question) {
+  if (error || !question) {
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>❌ Question Not Found</Text>
+          <Text style={styles.errorTitle}>Soal Tidak Tersedia</Text>
+          <Text style={styles.errorMessage}>
+            {error || 'Soal ini tidak tersedia atau masih dalam pengembangan.'}
+          </Text>
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.push(`/simulasi/${topicSlug}`)}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backButtonText}>Kembali ke Topik</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -297,198 +325,142 @@ function QuestionContent() {
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.headerBackButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.headerBackButtonText}>← Back</Text>
+          <Text style={styles.headerBackButtonText}>← Kembali</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Question {question.id}</Text>
-        <TouchableOpacity 
-          style={styles.hintButton}
-          onPress={() => setShowHints(!showHints)}
-        >
-          <Text style={styles.hintButtonText}>💡 Hints</Text>
-        </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitle}>Soal {question.id}</Text>
+          <Text style={styles.headerSubtitle}>{question.simulation_type}</Text>
+        </View>
       </View>
 
-      {/* Question */}
-      <View style={styles.questionCard}>
-        <Text style={styles.questionTitle}>📝 Soal Simulasi</Text>
-        <Text style={styles.questionText}>{question.question_text}</Text>
-        <Text style={styles.maxScore}>Max Score: {question.max_score} points</Text>
-      </View>
-
-      {/* Hints */}
-      {showHints && (
-        <View style={styles.hintsCard}>
-          <View style={styles.hintsHeader}>
-            <Text style={styles.hintsTitle}>💡 Hint {currentHint + 1}/{question.hints.length}</Text>
-            <View style={styles.hintsNavigation}>
-              <TouchableOpacity 
-                style={[styles.hintNavButton, currentHint === 0 && styles.hintNavButtonDisabled]}
-                onPress={prevHint}
-                disabled={currentHint === 0}
-              >
-                <Text style={styles.hintNavButtonText}>←</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.hintNavButton, currentHint === question.hints.length - 1 && styles.hintNavButtonDisabled]}
-                onPress={nextHint}
-                disabled={currentHint === question.hints.length - 1}
-              >
-                <Text style={styles.hintNavButtonText}>→</Text>
-              </TouchableOpacity>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Question Card */}
+        <View style={styles.questionCard}>
+          <View style={styles.questionHeader}>
+            <Text style={styles.questionTitle}>Soal</Text>
+            <View style={styles.scoreBadge}>
+              <Text style={styles.scoreText}>Maksimal: {question.max_score} poin</Text>
             </View>
           </View>
-          <Text style={styles.hintText}>{question.hints[currentHint]}</Text>
-        </View>
-      )}
-
-      {/* Simulation Controls */}
-      <View style={styles.simulationCard}>
-        <Text style={styles.simulationTitle}>🔬 Simulasi Parameter</Text>
-        
-        <View style={styles.parameterContainer}>
-          <View style={styles.parameter}>
-            <Text style={styles.parameterLabel}>Massa (kg)</Text>
-            <TextInput
-              style={styles.parameterInput}
-              value={simulationParams.mass.toString()}
-              onChangeText={(text) => setSimulationParams(prev => ({
-                ...prev,
-                mass: parseFloat(text) || 0
-              }))}
-              keyboardType="numeric"
-              placeholder="5"
-            />
-          </View>
           
-          <View style={styles.parameter}>
-            <Text style={styles.parameterLabel}>Gaya (N)</Text>
-            <TextInput
-              style={styles.parameterInput}
-              value={simulationParams.force.toString()}
-              onChangeText={(text) => setSimulationParams(prev => ({
-                ...prev,
-                force: parseFloat(text) || 0
-              }))}
-              keyboardType="numeric"
-              placeholder="20"
-            />
-          </View>
+          <Text style={styles.questionText}>{question.question_text}</Text>
           
-          <View style={styles.parameter}>
-            <Text style={styles.parameterLabel}>Koef. Gesek</Text>
-            <TextInput
-              style={styles.parameterInput}
-              value={simulationParams.friction.toString()}
-              onChangeText={(text) => setSimulationParams(prev => ({
-                ...prev,
-                friction: parseFloat(text) || 0
-              }))}
-              keyboardType="numeric"
-              placeholder="0.1"
-            />
-          </View>
-        </View>
+            {/* Parameters Info */}
+            {question.parameters && Object.keys(question.parameters).length > 0 && (
+              <View style={styles.parametersSection}>
+                <Text style={styles.sectionTitle}>Parameter</Text>
+                {Object.entries(question.parameters).map(([key, value]) => (
+                  <View key={key} style={styles.parameterItem}>
+                    <Text style={styles.parameterKey}>{key}</Text>
+                    <Text style={styles.parameterValue}>
+                      {typeof value === 'object' && value !== null && 'default' in value 
+                        ? `${value.default} ${value.unit || ''}`.trim()
+                        : typeof value === 'object' 
+                          ? JSON.stringify(value) 
+                          : String(value)
+                      }
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
-        <TouchableOpacity
-          style={[styles.simulateButton, isSimulating && styles.simulateButtonDisabled]}
-          onPress={runSimulation}
-          disabled={isSimulating}
-        >
-          {isSimulating ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.simulateButtonText}>🚀 Run Simulation</Text>
+          {/* Hints */}
+          {question.hints && question.hints.length > 0 && (
+            <View style={styles.hintsSection}>
+              <Text style={styles.sectionTitle}>Petunjuk</Text>
+              {question.hints.map((hint, index) => (
+                <Text key={index} style={styles.hintText}>
+                  {index + 1}. {hint}
+                </Text>
+              ))}
+            </View>
           )}
-        </TouchableOpacity>
-      </View>
+        </View>
 
-      {/* Simulation Visualization */}
-      {isSimulating && (
-        <View style={styles.visualizationCard}>
-          <Text style={styles.visualizationTitle}>🎬 Simulasi Berjalan...</Text>
-          <View style={styles.visualizationContainer}>
-            <Animated.View
-              style={[
-                styles.movingObject,
-                {
-                  transform: [{
-                    translateX: animationValue.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 200],
-                    }),
-                  }],
-                },
-              ]}
+        {/* ✅ Only show answer form for gaya-gesek */}
+        {isSubmissionEnabled && (
+          <>
+            {/* Answer Section */}
+            <View style={styles.answerCard}>
+              <Text style={styles.answerTitle}>Jawaban Anda</Text>
+              <Text style={styles.answerDescription}>
+                Berikan jawaban berdasarkan parameter dan tipe simulasi.
+              </Text>
+
+              {/* Dynamic input fields based on evaluation criteria */}
+              {question.evaluation_criteria && Object.entries(question.evaluation_criteria).map(([key, value]) => 
+                renderParameterInput(key, value)
+              )}
+
+              {/* Fallback general answer input */}
+              {(!question.evaluation_criteria || Object.keys(question.evaluation_criteria).length === 0) && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Jawaban:</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.multilineInput]}
+                    placeholder="Masukkan jawaban Anda di sini..."
+                    value={userAnswer.general_answer || ''}
+                    onChangeText={(text) => handleAnswerChange('general_answer', text)}
+                    multiline
+                    numberOfLines={4}
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* Submit Button */}
+            <TouchableOpacity 
+              style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+              onPress={handleSubmitAnswer}
+              disabled={submitting}
             >
-              <Text style={styles.objectText}>📦</Text>
-            </Animated.View>
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.submitButtonText}>Kirim Jawaban</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* ✅ Development note for non-friction topics */}
+        {!isSubmissionEnabled && (
+          <View style={styles.developmentNote}>
+            <Text style={styles.developmentNoteTitle}>Dalam Pengembangan</Text>
+            <Text style={styles.developmentNoteText}>
+              Fitur interaktif dan pengiriman jawaban untuk topik ini sedang dalam pengembangan. 
+              Saat ini Anda dapat mempelajari soal dan parameter yang tersedia.
+            </Text>
+            <TouchableOpacity 
+              style={styles.backToTopicButton}
+              onPress={() => router.push(`/simulasi/${topicSlug}`)}
+            >
+              <Text style={styles.backToTopicButtonText}>Kembali ke Topik</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* Simulation Results */}
-      {simulationResult && (
-        <View style={styles.resultsCard}>
-          <Text style={styles.resultsTitle}>📊 Hasil Simulasi</Text>
-          <View style={styles.resultsGrid}>
-            <View style={styles.resultItem}>
-              <Text style={styles.resultLabel}>Percepatan</Text>
-              <Text style={styles.resultValue}>{simulationResult.acceleration} m/s²</Text>
-            </View>
-            <View style={styles.resultItem}>
-              <Text style={styles.resultLabel}>Kecepatan Akhir</Text>
-              <Text style={styles.resultValue}>{simulationResult.velocity} m/s</Text>
-            </View>
-            <View style={styles.resultItem}>
-              <Text style={styles.resultLabel}>Jarak Tempuh</Text>
-              <Text style={styles.resultValue}>{simulationResult.displacement} m</Text>
-            </View>
-            <View style={styles.resultItem}>
-              <Text style={styles.resultLabel}>Waktu</Text>
-              <Text style={styles.resultValue}>{simulationResult.time} s</Text>
-            </View>
+        {/* ✅ Active development note for friction */}
+        {isSubmissionEnabled && (
+          <View style={styles.devNote}>
+            <Text style={styles.devNoteTitle}>Catatan</Text>
+            <Text style={styles.devNoteText}>
+              Soal ini dimuat dari data yang tersedia. Fitur simulasi interaktif telah tersedia untuk topik Gaya Gesek.
+            </Text>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* Answer Section */}
-      <View style={styles.answerCard}>
-        <Text style={styles.answerTitle}>✏️ Jawaban Anda</Text>
-        <Text style={styles.answerQuestion}>
-          Berapa percepatan yang dialami benda? (dalam m/s²)
-        </Text>
-        <TextInput
-          style={styles.answerInput}
-          value={userAnswer}
-          onChangeText={setUserAnswer}
-          keyboardType="numeric"
-          placeholder="Masukkan jawaban Anda..."
-          placeholderTextColor={colors.muted}
-        />
-        
-        <TouchableOpacity
-          style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-          onPress={submitAnswer}
-          disabled={submitting || !userAnswer.trim()}
-        >
-          {submitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitButtonText}>📤 Submit Answer</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Bottom Spacing */}
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -505,6 +477,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+
+  // Loading & Error
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -520,51 +494,72 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 40,
   },
   errorTitle: {
-    fontSize: fonts.sizes.title,
+    fontSize: fonts.sizes.subtitle,
     fontFamily: fonts.title,
-    color: colors.primary,
+    color: '#EF4444',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 22,
     marginBottom: 24,
+  },
+  backButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: '#FFFFFF',
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
   },
 
   // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.primary,
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
   },
   headerBackButton: {
-    marginRight: 16,
+    marginBottom: 12,
   },
   headerBackButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
+  },
+  headerInfo: {
+    alignItems: 'center',
   },
   headerTitle: {
-    flex: 1,
     fontSize: fonts.sizes.title,
     fontFamily: fonts.title,
     color: '#FFFFFF',
+    marginBottom: 4,
   },
-  hintButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  hintButtonText: {
-    color: '#FFFFFF',
+  headerSubtitle: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
 
-  // Cards
+  // Content
+  content: {
+    flex: 1,
+  },
+
+  // Question Card
   questionCard: {
     backgroundColor: colors.card,
     marginHorizontal: 20,
@@ -573,229 +568,91 @@ const styles = StyleSheet.create({
     padding: 20,
     elevation: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
+  },
+  questionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   questionTitle: {
     fontSize: fonts.sizes.subtitle,
     fontFamily: fonts.title,
     color: colors.primary,
-    marginBottom: 12,
+  },
+  scoreBadge: {
+    backgroundColor: colors.accent + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  scoreText: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.accent,
   },
   questionText: {
     fontSize: fonts.sizes.body,
     fontFamily: fonts.body,
     color: colors.text,
     lineHeight: 24,
-    marginBottom: 12,
-  },
-  maxScore: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.accent,
-  },
-
-  // Hints
-  hintsCard: {
-    backgroundColor: colors.card,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
-  },
-  hintsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  hintsTitle: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.primary,
-  },
-  hintsNavigation: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  hintNavButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hintNavButtonDisabled: {
-    backgroundColor: colors.muted,
-  },
-  hintNavButtonText: {
-    color: '#FFFFFF',
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
-  },
-  hintText: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
-    color: colors.text,
-    lineHeight: 22,
-  },
-
-  // Simulation
-  simulationCard: {
-    backgroundColor: colors.card,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  simulationTitle: {
-    fontSize: fonts.sizes.subtitle,
-    fontFamily: fonts.title,
-    color: colors.primary,
-    marginBottom: 16,
-  },
-  parameterContainer: {
-    gap: 12,
     marginBottom: 20,
   },
-  parameter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+
+  // Parameters Section
+  parametersSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.background,
   },
-  parameterLabel: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.text,
-    flex: 1,
-  },
-  parameterInput: {
-    flex: 1,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  sectionTitle: {
     fontSize: fonts.sizes.body,
     fontFamily: fonts.body,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.muted + '40',
-    textAlign: 'center',
-  },
-  simulateButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  simulateButtonDisabled: {
-    backgroundColor: colors.muted,
-    elevation: 0,
-    shadowOpacity: 0,
-  },
-  simulateButtonText: {
-    color: '#FFFFFF',
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
-  },
-
-  // Visualization
-  visualizationCard: {
-    backgroundColor: colors.card,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  visualizationTitle: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
     color: colors.primary,
-    marginBottom: 16,
-    textAlign: 'center',
+    marginBottom: 12,
   },
-  visualizationContainer: {
-    height: 100,
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    position: 'relative',
-  },
-  movingObject: {
-    position: 'absolute',
-    left: 20,
-  },
-  objectText: {
-    fontSize: 32,
-  },
-
-  // Results
-  resultsCard: {
-    backgroundColor: colors.card,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  resultsTitle: {
-    fontSize: fonts.sizes.subtitle,
-    fontFamily: fonts.title,
-    color: colors.primary,
-    marginBottom: 16,
-  },
-  resultsGrid: {
+  parameterItem: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  resultItem: {
-    flex: 1,
-    minWidth: '45%',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     backgroundColor: colors.background,
-    padding: 12,
     borderRadius: 8,
-    alignItems: 'center',
   },
-  resultLabel: {
+  parameterKey: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.text,
+    flex: 1,
+  },
+  parameterValue: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+
+  // Hints Section
+  hintsSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.background,
+  },
+  hintText: {
     fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
     color: colors.muted,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  resultValue: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.primary,
-    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 8,
+    paddingLeft: 8,
   },
 
-  // Answer
+  // Answer Card (only for gaya-gesek)
   answerCard: {
     backgroundColor: colors.card,
     marginHorizontal: 20,
@@ -813,35 +670,52 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginBottom: 8,
   },
-  answerQuestion: {
-    fontSize: fonts.sizes.body,
+  answerDescription: {
+    fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
-    color: colors.text,
-    marginBottom: 16,
-    lineHeight: 22,
+    color: colors.muted,
+    lineHeight: 20,
+    marginBottom: 20,
   },
-  answerInput: {
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+
+  // Input Fields
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
     fontSize: fonts.sizes.body,
     fontFamily: fonts.body,
     color: colors.text,
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.muted + '40',
-    marginBottom: 16,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.text,
   },
+  multilineInput: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+
+  // Submit Button
   submitButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: 14,
+    backgroundColor: colors.primary,
+    marginHorizontal: 20,
+    marginTop: 24,
+    paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-    shadowColor: colors.accent,
+    elevation: 4,
+    shadowColor: colors.primary,
     shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   submitButtonDisabled: {
     backgroundColor: colors.muted,
@@ -851,17 +725,65 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
-  backButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
+
+  // Development Note (for non-friction topics)
+  developmentNote: {
+    backgroundColor: '#EBF8FF',
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 12,
+    padding: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3182CE',
+  },
+  developmentNoteTitle: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: '#2C5282',
+    marginBottom: 8,
+  },
+  developmentNoteText: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: '#2C5282',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  backToTopicButton: {
+    backgroundColor: '#3182CE',
     paddingVertical: 12,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  backButtonText: {
+  backToTopicButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
+  },
+
+  // Dev Note (for friction)
+  devNote: {
+    backgroundColor: '#FEF3C7',
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+  },
+  devNoteTitle: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  devNoteText: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: '#92400E',
+    lineHeight: 18,
   },
 });

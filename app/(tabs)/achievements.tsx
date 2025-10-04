@@ -4,14 +4,14 @@ import { Achievement, apiService } from '@/services/api';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface UserAchievement extends Achievement {
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
   authButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
 
   // Header
@@ -586,12 +586,12 @@ const styles = StyleSheet.create({
   },
   progressTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.text,
   },
   progressPercentage: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
   overallProgressBar: {
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.muted,
   },
   filterTextActive: {
@@ -723,12 +723,12 @@ const styles = StyleSheet.create({
   },
   xpText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
   achievementTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
     marginBottom: 6,
   },

@@ -1,0 +1,309 @@
+LARAVEL BELAJAR FISIKA - CONSISTENCY GUIDE
+==========================================
+
+AVAILABLE CONTROLLERS:
+======================
+1. AuthController (register, login, profile, logout)
+2. SimulationController (getTopics, getQuestion, submitAnswer)
+
+AVAILABLE MODELS & DATABASE STRUCTURE:
+======================================
+
+1. USERS TABLE
+   Fields:
+   - id (bigint, primary key)
+   - name (varchar)
+   - email (varchar, unique) 
+   - email_verified_at (timestamp, nullable)
+   - password (varchar)
+   - avatar (varchar, nullable)
+   - level (int, default 1)
+   - total_xp (int, default 0)
+   - streak_days (int, default 0)
+   - last_activity_date (date, nullable)
+   - remember_token (varchar, nullable)
+   - created_at, updated_at (timestamps)
+   
+   Relationships:
+   - achievements() -> hasMany(UserAchievement)
+   - progress() -> hasMany(UserProgress)
+   - attempts() -> hasMany(SimulationAttempt)
+
+2. PHYSICS_TOPICS TABLE
+   Fields:
+   - id (bigint, primary key)
+   - name (varchar) // Newton II, Energi Kinetik, Momentum
+   - slug (varchar, unique) // newton_second_law, kinetic_energy, momentum
+   - subtitle (varchar) // F = m × a, Ek = ½mv², p = m × v
+   - description (text)
+   - difficulty (enum: 'Beginner', 'Intermediate', 'Advanced')
+   - estimated_duration (int) // dalam menit
+   - icon (varchar, nullable)
+   - is_active (boolean, default true)
+   - order_index (int, default 0)
+   - created_at, updated_at (timestamps)
+   
+   Relationships:
+   - questions() -> hasMany(SimulationQuestion)
+   - userProgress() -> hasMany(UserProgress)
+
+3. SIMULATION_QUESTIONS TABLE
+   Fields:
+   - id (bigint, primary key)
+   - physics_topic_id (foreign key -> physics_topics.id, cascade delete)
+   - question_text (text)
+   - simulation_type (varchar) // newton_second_law, kinetic_energy, momentum
+   - parameters (json) // mass, velocity, friction, dll
+   - evaluation_criteria (json) // target_variable, target_value, tolerance
+   - hints (json, nullable) // Array of hints
+   - max_score (int, default 100)
+   - difficulty (enum: 'Beginner', 'Intermediate', 'Advanced')
+   - is_active (boolean, default true)
+   - created_at, updated_at (timestamps)
+   
+   Relationships:
+   - topic() -> belongsTo(PhysicsTopic, 'physics_topic_id')
+   - attempts() -> hasMany(SimulationAttempt)
+
+4. USER_PROGRESS TABLE
+   Fields:
+   - id (bigint, primary key)
+   - user_id (foreign key -> users.id, cascade delete)
+   - physics_topic_id (foreign key -> physics_topics.id, cascade delete)
+   - completed_questions (int, default 0)
+   - total_questions (int)
+   - total_score (int, default 0)
+   - best_score (int, default 0)
+   - first_attempt_at (timestamp, nullable)
+   - last_attempt_at (timestamp, nullable)
+   - is_completed (boolean, default false)
+   - created_at, updated_at (timestamps)
+   - UNIQUE constraint: (user_id, physics_topic_id)
+   
+   Relationships:
+   - user() -> belongsTo(User)
+   - topic() -> belongsTo(PhysicsTopic, 'physics_topic_id')
+
+5. SIMULATION_ATTEMPTS TABLE
+   Fields:
+   - id (bigint, primary key)
+   - user_id (foreign key -> users.id, cascade delete)
+   - simulation_question_id (foreign key -> simulation_questions.id, cascade delete)
+   - user_answer (json) // Applied force, calculated values, dll
+   - correct_answer (json)
+   - is_correct (boolean)
+   - score_earned (int)
+   - attempt_number (int)
+   - time_taken (float, nullable) // dalam detik
+   - simulation_data (json, nullable) // Data simulasi lengkap
+   - created_at, updated_at (timestamps)
+   
+   Relationships:
+   - user() -> belongsTo(User)
+   - question() -> belongsTo(SimulationQuestion, 'simulation_question_id')
+
+6. ACHIEVEMENTS TABLE
+   Fields:
+   - id (bigint, primary key)
+   - name (varchar)
+   - slug (varchar, unique)
+   - description (text)
+   - icon (varchar)
+   - criteria (json) // Kondisi untuk unlock achievement
+   - xp_reward (int)
+   - rarity (enum: 'common', 'rare', 'epic', 'legendary')
+   - is_active (boolean, default true)
+   - created_at, updated_at (timestamps)
+   
+   Relationships:
+   - userAchievements() -> hasMany(UserAchievement)
+
+7. USER_ACHIEVEMENTS TABLE
+   Fields:
+   - id (bigint, primary key)
+   - user_id (foreign key -> users.id, cascade delete)
+   - achievement_id (foreign key -> achievements.id, cascade delete)
+   - earned_at (timestamp)
+   - created_at, updated_at (timestamps)
+   - UNIQUE constraint: (user_id, achievement_id)
+   
+   Relationships:
+   - user() -> belongsTo(User)
+   - achievement() -> belongsTo(Achievement)
+
+8. DAILY_CHALLENGES TABLE
+   Fields:
+   - id (bigint, primary key)
+   - challenge_date (date)
+   - simulation_question_id (foreign key -> simulation_questions.id, constrained)
+   - xp_multiplier (int, default 2)
+   - is_active (boolean, default true)
+   - created_at, updated_at (timestamps)
+   - UNIQUE constraint: challenge_date
+   
+   Relationships:
+   - question() -> belongsTo(SimulationQuestion, 'simulation_question_id')
+
+9. PERSONAL_ACCESS_TOKENS TABLE (Laravel Sanctum)
+   Fields:
+   - id (bigint, primary key)
+   - tokenable_type (varchar)
+   - tokenable_id (bigint)
+   - name (text)
+   - token (varchar 64, unique)
+   - abilities (text, nullable)
+   - last_used_at (timestamp, nullable)
+   - expires_at (timestamp, nullable, indexed)
+   - created_at, updated_at (timestamps)
+
+10. CACHE TABLE (Laravel Cache)
+    Fields:
+    - key (varchar, primary key)
+    - value (mediumtext)
+    - expiration (int)
+
+11. CACHE_LOCKS TABLE (Laravel Cache)
+    Fields:
+    - key (varchar, primary key)
+    - owner (varchar)
+    - expiration (int)
+
+12. JOBS TABLE (Laravel Queue)
+    Fields:
+    - id (bigint, primary key)
+    - queue (varchar, indexed)
+    - payload (longtext)
+    - attempts (tinyint unsigned)
+    - reserved_at (int unsigned, nullable)
+    - available_at (int unsigned)
+    - created_at (int unsigned)
+
+13. JOB_BATCHES TABLE (Laravel Queue)
+    Fields:
+    - id (varchar, primary key)
+    - name (varchar)
+    - total_jobs (int)
+    - pending_jobs (int)
+    - failed_jobs (int)
+    - failed_job_ids (longtext)
+    - options (mediumtext, nullable)
+    - cancelled_at (int, nullable)
+    - created_at (int)
+    - finished_at (int, nullable)
+
+14. FAILED_JOBS TABLE (Laravel Queue)
+    Fields:
+    - id (bigint, primary key)
+    - uuid (varchar, unique)
+    - connection (text)
+    - queue (text)
+    - payload (longtext)
+    - exception (longtext)
+    - failed_at (timestamp, default current)
+
+AVAILABLE API ROUTES:
+====================
+
+PUBLIC ROUTES:
+- GET /api/health
+- POST /api/auth/register
+- POST /api/auth/login
+
+PROTECTED ROUTES (auth:sanctum):
+- GET /api/auth/profile
+- POST /api/auth/logout
+
+- GET /api/simulation/topics
+- GET /api/simulation/topics/{topicSlug}/question
+- POST /api/simulation/questions/{questionId}/submit
+
+- GET /api/user/
+- GET /api/user/achievements
+- GET /api/user/progress
+- GET /api/user/attempts
+
+- GET /api/topics/
+- GET /api/topics/{slug}
+- GET /api/topics/{slug}/questions
+
+- GET /api/achievements/
+
+- GET /api/challenges/daily
+- GET /api/challenges/
+
+ENUM VALUES TO USE:
+===================
+- physics_topics.difficulty: ['Beginner', 'Intermediate', 'Advanced']
+- simulation_questions.difficulty: ['Beginner', 'Intermediate', 'Advanced']
+- achievements.rarity: ['common', 'rare', 'epic', 'legendary']
+
+JSON FIELD STRUCTURES:
+======================
+- simulation_questions.parameters: {"mass": 20, "initial_velocity": 0, "friction_coefficient": 0.2}
+- simulation_questions.evaluation_criteria: {"target_variable": "acceleration", "target_value": 2.5, "tolerance": 0.1}
+- simulation_questions.hints: ["Consider Newton's second law", "F = ma"]
+- simulation_attempts.user_answer: {"applied_force": 50, "calculated_acceleration": 2.5}
+- simulation_attempts.correct_answer: {"force": 50, "acceleration": 2.5}
+- simulation_attempts.simulation_data: {"final_velocity": 12.5, "distance_traveled": 31.25}
+- achievements.criteria: {"type": "streak", "value": 7, "condition": ">="}
+
+FORBIDDEN ACTIONS:
+==================
+❌ DO NOT add fields that don't exist in migrations
+❌ DO NOT add relationships that don't exist in models
+❌ DO NOT add controller methods that don't exist
+❌ DO NOT add complex calculations without model methods
+❌ DO NOT add pagination without controller support
+❌ DO NOT add statistics/performance routes without existing methods
+❌ DO NOT add leaderboard without existing implementation
+❌ DO NOT modify enum values in code (use migration values exactly)
+❌ DO NOT add routes that reference non-existent controller methods
+❌ DO NOT add joins or complex queries without proper relationships
+❌ DO NOT use mock data, dummy data, or hardcoded fake data in responses
+❌ DO NOT return static arrays or sample data instead of real database queries
+
+REQUIRED ACTIONS:
+=================
+✅ ALWAYS use exact field names from migrations
+✅ ALWAYS use exact enum values from migrations
+✅ ALWAYS respect foreign key constraints
+✅ ALWAYS use defined relationships in models
+✅ ALWAYS follow existing controller method signatures
+✅ ALWAYS return consistent JSON response format
+✅ ALWAYS validate required fields before database operations
+✅ ALWAYS query real data from database using proper Eloquent models
+✅ ALWAYS use actual database relationships and models for data retrieval
+
+FOREIGN KEY RELATIONSHIPS:
+===========================
+- user_progress.user_id -> users.id (cascade delete)
+- user_progress.physics_topic_id -> physics_topics.id (cascade delete)
+- simulation_questions.physics_topic_id -> physics_topics.id (cascade delete)
+- simulation_attempts.user_id -> users.id (cascade delete)
+- simulation_attempts.simulation_question_id -> simulation_questions.id (cascade delete)
+- user_achievements.user_id -> users.id (cascade delete)
+- user_achievements.achievement_id -> achievements.id (cascade delete)
+- daily_challenges.simulation_question_id -> simulation_questions.id (constrained)
+
+UNIQUE CONSTRAINTS:
+===================
+- users.email
+- physics_topics.slug
+- achievements.slug
+- user_progress.(user_id, physics_topic_id)
+- user_achievements.(user_id, achievement_id)
+- daily_challenges.challenge_date
+- personal_access_tokens.token
+
+ALWAYS REFERENCE THIS FILE BEFORE:
+==================================
+- Creating new routes
+- Adding model relationships
+- Adding controller methods
+- Modifying existing functionality
+- Adding new features
+- Writing seeders
+- Creating API responses
+
+LAST UPDATED: 2025-09-30
+TOTAL TABLES: 14 (8 application tables + 6 Laravel system tables)

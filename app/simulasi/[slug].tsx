@@ -1,18 +1,17 @@
 import { AuthGuard } from '@/components/AuthGuard';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiService, SimulationQuestion, SimulationTopic } from '@/services/api';
+import { apiService, PhysicsTopic, SimulationQuestion } from '@/services/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 function TopicSimulationContent() {
@@ -21,10 +20,11 @@ function TopicSimulationContent() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
 
   // State management
-  const [topic, setTopic] = useState<SimulationTopic | null>(null);
+  const [topic, setTopic] = useState<PhysicsTopic | null>(null);
   const [questions, setQuestions] = useState<SimulationQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (slug) {
@@ -33,96 +33,43 @@ function TopicSimulationContent() {
   }, [slug]);
 
   const loadTopicData = async () => {
+    if (!slug) return;
+    
     try {
       setLoading(true);
+      setError(null);
       console.log('🔍 Loading topic data for slug:', slug);
 
-      // Try to get topic questions from API
-      const response = await apiService.getTopicQuestions(slug);
-      
-      if (response.status === 'success' && response.data) {
-        const { topic: topicData, questions: questionsData } = response.data;
-        setTopic(topicData);
-        setQuestions(questionsData || []);
-        console.log('✅ Topic data loaded:', topicData.name);
+      const [topicResponse, questionsResponse] = await Promise.allSettled([
+        apiService.getTopicBySlug(slug),
+        apiService.getTopicQuestions(slug)
+      ]);
+
+      if (topicResponse.status === 'fulfilled' && 
+          topicResponse.value.status === 'success' && 
+          topicResponse.value.data) {
+        setTopic(topicResponse.value.data.topic);
+        console.log('✅ Topic loaded:', topicResponse.value.data.topic.name);
       } else {
-        console.log('⚠️ API failed, loading mock data');
-        loadMockData();
+        throw new Error('Topic not found or API error');
       }
 
-    } catch (error) {
+      if (questionsResponse.status === 'fulfilled' && 
+          questionsResponse.value.status === 'success' && 
+          questionsResponse.value.data) {
+        setQuestions(questionsResponse.value.data.questions || []);
+        console.log('✅ Questions loaded:', questionsResponse.value.data.questions?.length || 0);
+      } else {
+        console.log('⚠️ No questions available for this topic');
+        setQuestions([]);
+      }
+
+    } catch (error: any) {
       console.error('❌ Failed to load topic data:', error);
-      loadMockData();
+      setError(error.message || 'Failed to load topic data. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const loadMockData = () => {
-    const mockTopic: SimulationTopic = {
-      id: 1,
-      name: "Hukum Newton",
-      slug: "hukum-newton",
-      description: "Simulasi gerak benda dengan berbagai gaya dan percepatan",
-      icon: "⚡",
-      difficulty: "Beginner",
-      estimated_duration: 15,
-      question_count: 5,
-      progress: {
-        completed_questions: 2,
-        total_questions: 5,
-        best_score: 85,
-        is_completed: false,
-        progress_percentage: 40,
-      }
-    };
-
-    const mockQuestions: SimulationQuestion[] = [
-      {
-        id: 1,
-        question_text: "Sebuah benda bermassa 5 kg didorong dengan gaya 20 N. Berapa percepatan yang dialami benda tersebut?",
-        simulation_type: "force_motion",
-        parameters: {
-          mass: { min: 1, max: 10, unit: 'kg', default: 5 },
-          force: { min: 5, max: 50, unit: 'N', default: 20 },
-          friction: { min: 0, max: 0.5, unit: 'coefficient', default: 0 }
-        },
-        evaluation_criteria: {
-          acceleration_tolerance: 0.1,
-          expected_formula: "a = F / m"
-        },
-        hints: [
-          "Gunakan Hukum Newton II: F = ma",
-          "Percepatan = Gaya / Massa",
-          "Satuan percepatan adalah m/s²"
-        ],
-        max_score: 100
-      },
-      {
-        id: 2,
-        question_text: "Benda yang sama didorong dengan gaya 20 N di atas permukaan dengan koefisien gesek 0.1. Berapa percepatan yang dialami?",
-        simulation_type: "force_motion_friction",
-        parameters: {
-          mass: { min: 1, max: 10, unit: 'kg', default: 5 },
-          force: { min: 5, max: 50, unit: 'N', default: 20 },
-          friction: { min: 0, max: 0.5, unit: 'coefficient', default: 0.1 }
-        },
-        evaluation_criteria: {
-          acceleration_tolerance: 0.1,
-          expected_formula: "a = (F - μmg) / m"
-        },
-        hints: [
-          "Jangan lupa memperhitungkan gaya gesek",
-          "Gaya gesek = μ × m × g",
-          "Gaya bersih = Gaya dorong - Gaya gesek"
-        ],
-        max_score: 100
-      },
-      // Add more questions...
-    ];
-
-    setTopic(mockTopic);
-    setQuestions(mockQuestions);
   };
 
   const handleRefresh = async () => {
@@ -137,10 +84,24 @@ function TopicSimulationContent() {
       pathname: '/simulasi/question/[id]',
       params: { 
         id: question.id.toString(),
-        topicSlug: slug,
+        topicSlug: slug || '',
         questionData: JSON.stringify(question)
       }
     });
+  };
+
+  const handleStartSimulation = () => {
+    if (!topic) return;
+    
+    // ✅ Only gaya-gesek has interactive simulation
+    if (topic.slug === 'gaya-gesek') {
+      router.push({
+        pathname: '/simulasi/interactive/friction',
+        params: { 
+          slug: topic.slug
+        }
+      });
+    }
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -149,6 +110,24 @@ function TopicSimulationContent() {
       case 'intermediate': return '#F59E0B';
       case 'advanced': return '#EF4444';
       default: return colors.muted;
+    }
+  };
+
+  const getTopicStatus = () => {
+    if (!topic) return { label: 'Unknown', color: colors.muted, description: '' };
+    
+    if (topic.slug === 'gaya-gesek') {
+      return {
+        label: 'Siap',
+        color: '#10B981',
+        description: 'Simulasi interaktif tersedia'
+      };
+    } else {
+      return {
+        label: 'Dalam Pengembangan',
+        color: '#F59E0B',
+        description: 'Soal tersedia, simulasi segera hadir'
+      };
     }
   };
 
@@ -168,8 +147,8 @@ function TopicSimulationContent() {
             {item.question_text}
           </Text>
           <View style={styles.questionMeta}>
-            <Text style={styles.simulationType}>🔬 {item.simulation_type}</Text>
-            <Text style={styles.maxScore}>Max: {item.max_score} pts</Text>
+            <Text style={styles.simulationType}>{item.simulation_type}</Text>
+            <Text style={styles.maxScore}>Maksimal: {item.max_score} poin</Text>
           </View>
         </View>
         <Text style={styles.questionArrow}>›</Text>
@@ -182,27 +161,31 @@ function TopicSimulationContent() {
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading topic...</Text>
+          <Text style={styles.loadingText}>Memuat topik...</Text>
         </View>
       </View>
     );
   }
 
-  if (!topic) {
+  if (error || !topic) {
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>❌ Topic Not Found</Text>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
+          <Text style={styles.errorTitle}>
+            {error ? 'Error' : 'Topik Tidak Ditemukan'}
+          </Text>
+          <Text style={styles.errorMessage}>
+            {error || `Topik "${slug}" tidak tersedia atau masih dalam pengembangan.`}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={error ? loadTopicData : () => router.back()}>
+            <Text style={styles.retryButtonText}>{error ? 'Coba Lagi' : 'Kembali'}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
+
+  const status = getTopicStatus();
 
   return (
     <View style={styles.container}>
@@ -212,74 +195,115 @@ function TopicSimulationContent() {
           style={styles.headerBackButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.headerBackButtonText}>← Back</Text>
+          <Text style={styles.headerBackButtonText}>← Kembali</Text>
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{topic.icon} {topic.name}</Text>
-          <Text style={styles.headerSubtitle}>{topic.description}</Text>
+          <Text style={styles.headerTitle}>{topic.name}</Text>
+          <Text style={styles.headerSubtitle}>{topic.subtitle}</Text>
         </View>
       </View>
 
-      {/* Topic Info */}
-      <View style={styles.topicInfoCard}>
-        <View style={styles.topicMeta}>
-          <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(topic.difficulty) + '20' }]}>
-            <Text style={[styles.difficultyText, { color: getDifficultyColor(topic.difficulty) }]}>
-              {topic.difficulty}
-            </Text>
-          </View>
-          <Text style={styles.duration}>⏱️ {topic.estimated_duration} min</Text>
-          <Text style={styles.questionCount}>📝 {topic.question_count} soal</Text>
-        </View>
-        
-        {topic.progress && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressText}>
-                Progress: {topic.progress.completed_questions}/{topic.progress.total_questions}
-              </Text>
-              <Text style={styles.progressPercentage}>
-                {topic.progress.progress_percentage}%
-              </Text>
+      <FlatList
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+        ListHeaderComponent={
+          <View>
+            {/* Topic Info Card */}
+            <View style={styles.topicCard}>
+              <View style={styles.topicHeader}>
+                <View style={styles.topicInfo}>
+                  <Text style={styles.topicName}>{topic.name}</Text>
+                  <Text style={styles.topicDescription}>{topic.description || topic.subtitle}</Text>
+                  
+                  <View style={styles.topicMeta}>
+                    <View style={[styles.statusBadge, { backgroundColor: status.color + '20' }]}>
+                      <Text style={[styles.statusText, { color: status.color }]}>
+                        {status.label}
+                      </Text>
+                    </View>
+                    <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(topic.difficulty) + '20' }]}>
+                      <Text style={[styles.difficultyText, { color: getDifficultyColor(topic.difficulty) }]}>
+                        {topic.difficulty === 'Beginner' ? 'Pemula' :
+                         topic.difficulty === 'Intermediate' ? 'Menengah' : 'Lanjut'}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <Text style={styles.statusDescription}>{status.description}</Text>
+                </View>
+              </View>
+
+              {/* Topic Stats */}
+              <View style={styles.topicStats}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{topic.estimated_duration} menit</Text>
+                  <Text style={styles.statLabel}>Durasi</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{questions.length}</Text>
+                  <Text style={styles.statLabel}>Soal</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>
+                    {questions.reduce((sum, q) => sum + q.max_score, 0)}
+                  </Text>
+                  <Text style={styles.statLabel}>Skor Maksimal</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill,
-                  { width: `${topic.progress.progress_percentage}%` }
-                ]}
-              />
-            </View>
-            {topic.progress.best_score > 0 && (
-              <Text style={styles.bestScore}>
-                Best Score: {topic.progress.best_score}/100
-              </Text>
+
+            {/* ✅ Action Buttons - Only show for gaya-gesek */}
+            {topic.slug === 'gaya-gesek' && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity 
+                  style={styles.primaryButton}
+                  onPress={handleStartSimulation}
+                >
+                  <Text style={styles.primaryButtonText}>Mulai Simulasi Interaktif</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ✅ Development note for other topics */}
+            {topic.slug !== 'gaya-gesek' && (
+              <View style={styles.developmentNote}>
+                <Text style={styles.developmentNoteTitle}>Dalam Pengembangan</Text>
+                <Text style={styles.developmentNoteText}>
+                  Simulasi interaktif untuk topik ini sedang dalam pengembangan. 
+                  Saat ini Anda dapat mengakses soal-soal latihan yang tersedia.
+                </Text>
+              </View>
+            )}
+
+            {/* Questions Section Header */}
+            {questions.length > 0 && (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Soal Tersedia</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Berlatih dengan {questions.length} soal dari API
+                </Text>
+              </View>
             )}
           </View>
-        )}
-      </View>
-
-      {/* Questions List */}
-      <View style={styles.questionsSection}>
-        <Text style={styles.sectionTitle}>📝 Daftar Soal Simulasi</Text>
-        <FlatList
-          data={questions}
-          renderItem={renderQuestionItem}
-          keyExtractor={(item) => item.id.toString()}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-          ListEmptyComponent={
+        }
+        data={questions}
+        renderItem={renderQuestionItem}
+        keyExtractor={(item) => item.id.toString()}
+        ListEmptyComponent={
+          !loading && (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>📝 No questions available</Text>
+              <Text style={styles.emptyTitle}>Belum Ada Soal</Text>
               <Text style={styles.emptyMessage}>
-                Questions for this topic are being prepared
+                Soal untuk topik ini sedang dipersiapkan. Silakan kembali lagi nanti!
               </Text>
             </View>
-          }
-        />
-      </View>
+          )
+        }
+        ListFooterComponent={<View style={{ height: 100 }} />}
+      />
     </View>
   );
 }
@@ -297,6 +321,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  
+  // Loading & Error States
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -312,50 +338,75 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 40,
   },
   errorTitle: {
-    fontSize: fonts.sizes.title,
+    fontSize: fonts.sizes.subtitle,
     fontFamily: fonts.title,
-    color: colors.primary,
+    color: '#EF4444',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 22,
     marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
   },
 
   // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.primary,
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
   },
   headerBackButton: {
-    marginRight: 16,
+    marginBottom: 12,
   },
   headerBackButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   headerInfo: {
-    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: fonts.sizes.title,
     fontFamily: fonts.title,
     color: '#FFFFFF',
+    textAlign: 'center',
     marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: fonts.sizes.body,
+    fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
     color: '#FFFFFF',
     opacity: 0.9,
+    textAlign: 'center',
   },
 
-  // Topic Info
-  topicInfoCard: {
+  // Content
+  content: {
+    flex: 1,
+  },
+
+  // Topic Card
+  topicCard: {
     backgroundColor: colors.card,
     marginHorizontal: 20,
     marginTop: 20,
@@ -363,92 +414,149 @@ const styles = StyleSheet.create({
     padding: 20,
     elevation: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
+  },
+  topicHeader: {
+    marginBottom: 16,
+  },
+  topicInfo: {
+    flex: 1,
+  },
+  topicName: {
+    fontSize: fonts.sizes.subtitle,
+    fontFamily: fonts.title,
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  topicDescription: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.text,
+    lineHeight: 20,
+    marginBottom: 12,
   },
   topicMeta: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexWrap: 'wrap',
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: fonts.sizes.caption,
+    fontFamily: fonts.body,
   },
   difficultyBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   difficultyText: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontSize: fonts.sizes.caption,
+    fontFamily: fonts.body,
   },
-  duration: {
+  statusDescription: {
     fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
     color: colors.muted,
-  },
-  questionCount: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.body,
-    color: colors.muted,
+    fontStyle: 'italic',
   },
 
-  // Progress
-  progressContainer: {
+  // Topic Stats
+  topicStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: colors.muted + '20',
+    borderTopColor: colors.background,
   },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  statItem: {
     alignItems: 'center',
-    marginBottom: 8,
   },
-  progressText: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.text,
-  },
-  progressPercentage: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.primary,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: colors.muted + '30',
-    borderRadius: 3,
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: 6,
-    backgroundColor: colors.primary,
-    borderRadius: 3,
-  },
-  bestScore: {
-    fontSize: fonts.sizes.small,
+  statValue: {
+    fontSize: fonts.sizes.body,
     fontFamily: fonts.body,
-    color: colors.accent,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: fonts.sizes.caption,
+    fontFamily: fonts.body,
+    color: colors.muted,
   },
 
-  // Questions
-  questionsSection: {
-    flex: 1,
+  // Action Buttons (only for gaya-gesek)
+  actionButtons: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    marginTop: 16,
+  },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+  },
+
+  // Development Note (for non-friction topics)
+  developmentNote: {
+    backgroundColor: '#EBF8FF',
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3182CE',
+  },
+  developmentNoteTitle: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: '#2C5282',
+    marginBottom: 8,
+  },
+  developmentNoteText: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: '#2C5282',
+    lineHeight: 20,
+  },
+
+  // Section Header
+  sectionHeader: {
+    paddingHorizontal: 20,
+    marginTop: 32,
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: fonts.sizes.subtitle,
     fontFamily: fonts.title,
     color: colors.primary,
-    marginBottom: 16,
+    marginBottom: 4,
   },
+  sectionSubtitle: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.muted,
+  },
+
+  // Question Cards
   questionCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
+    marginHorizontal: 20,
     marginBottom: 12,
+    borderRadius: 12,
     elevation: 2,
     shadowColor: '#000',
     shadowOpacity: 0.05,
@@ -457,27 +565,28 @@ const styles = StyleSheet.create({
   questionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
   },
   questionNumber: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary + '20',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   questionNumberText: {
+    color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.primary,
+    fontFamily: fonts.body,
   },
   questionInfo: {
     flex: 1,
   },
   questionTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
     marginBottom: 4,
   },
@@ -490,8 +599,7 @@ const styles = StyleSheet.create({
   },
   questionMeta: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
   },
   simulationType: {
     fontSize: fonts.sizes.caption,
@@ -500,41 +608,33 @@ const styles = StyleSheet.create({
   },
   maxScore: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.accent,
   },
   questionArrow: {
-    fontSize: 20,
+    fontSize: 24,
     color: colors.muted,
     marginLeft: 8,
   },
 
-  // Empty
+  // Empty State
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
     fontSize: fonts.sizes.subtitle,
     fontFamily: fonts.title,
     color: colors.primary,
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptyMessage: {
     fontSize: fonts.sizes.body,
     fontFamily: fonts.body,
     color: colors.muted,
     textAlign: 'center',
-  },
-  backButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    lineHeight: 22,
   },
 });

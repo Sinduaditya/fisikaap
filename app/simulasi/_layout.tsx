@@ -16,6 +16,8 @@ export default function SimulationLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="[slug]" />
         <Stack.Screen name="question/[id]" />
+        <Stack.Screen name="webview/[slug]" />
+        <Stack.Screen name="interactive/friction" />
       </Stack>
     </AuthGuard>
   );

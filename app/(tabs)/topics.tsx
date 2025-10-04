@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   authButtonText: {
     color: '#FFFFFF',
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
 
   // Header
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.muted,
   },
   filterTextActive: {
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
   },
   difficultyText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   topicArrow: {
     fontSize: 24,

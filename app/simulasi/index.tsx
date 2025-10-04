@@ -1,18 +1,18 @@
 import { AuthGuard } from '@/components/AuthGuard';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiService, SimulationTopic } from '@/services/api';
+import { apiService, PhysicsTopic } from '@/services/api';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 function SimulationContent() {
@@ -20,10 +20,11 @@ function SimulationContent() {
   const { user } = useAuth();
 
   // State management
-  const [topics, setTopics] = useState<SimulationTopic[]>([]);
+  const [topics, setTopics] = useState<PhysicsTopic[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadSimulationTopics();
@@ -32,81 +33,36 @@ function SimulationContent() {
   const loadSimulationTopics = async () => {
     try {
       setLoading(true);
+      setError(null);
       
+      console.log('📡 Loading simulation topics from API...');
       const response = await apiService.getSimulationTopics();
       
       if (response.status === 'success' && response.data) {
         const simulationTopics = response.data.topics || [];
-        setTopics(simulationTopics);
-        console.log('✅ Simulation topics loaded:', simulationTopics.length);
+        
+        // ✅ Filter 4 topik yang diinginkan: hukum-newton, energi-kinetik, momentum, gaya-gesek
+        const targetSlugs = ['hukum-newton', 'energi-kinetik', 'momentum', 'gaya-gesek'];
+        const filteredTopics = simulationTopics.filter(topic => 
+          targetSlugs.includes(topic.slug)
+        );
+        
+        setTopics(filteredTopics);
+        console.log('✅ Simulation topics loaded:', filteredTopics.length);
+        
+        if (filteredTopics.length === 0) {
+          setError('No simulation topics available. Please check with administrator.');
+        }
       } else {
-        console.log('⚠️ API failed, loading mock data');
-        loadMockTopics();
+        throw new Error(response.message || 'Failed to load topics');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to load simulation topics:', error);
-      loadMockTopics();
+      setError(error.message || 'Unable to load simulation topics. Please check your connection and try again.');
+      setTopics([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const loadMockTopics = () => {
-    const mockTopics: SimulationTopic[] = [
-      {
-        id: 1,
-        name: "Hukum Newton",
-        slug: "hukum-newton",
-        description: "Simulasi gerak benda dengan berbagai gaya",
-        icon: "⚡",
-        difficulty: "Beginner",
-        estimated_duration: 15,
-        question_count: 5,
-        progress: {
-          completed_questions: 2,
-          total_questions: 5,
-          best_score: 85,
-          is_completed: false,
-          progress_percentage: 40,
-        }
-      },
-      {
-        id: 2,
-        name: "Energi Kinetik",
-        slug: "energi-kinetik",
-        description: "Simulasi energi kinetik dan potensial",
-        icon: "🔋",
-        difficulty: "Intermediate",
-        estimated_duration: 20,
-        question_count: 4,
-        progress: {
-          completed_questions: 0,
-          total_questions: 4,
-          best_score: 0,
-          is_completed: false,
-          progress_percentage: 0,
-        }
-      },
-      {
-        id: 3,
-        name: "Gelombang",
-        slug: "gelombang",
-        description: "Simulasi propagasi gelombang",
-        icon: "🌊",
-        difficulty: "Advanced",
-        estimated_duration: 25,
-        question_count: 6,
-        progress: {
-          completed_questions: 0,
-          total_questions: 6,
-          best_score: 0,
-          is_completed: false,
-          progress_percentage: 0,
-        }
-      },
-    ];
-    
-    setTopics(mockTopics);
   };
 
   const handleRefresh = async () => {
@@ -115,17 +71,27 @@ function SimulationContent() {
     setRefreshing(false);
   };
 
-  const handleTopicPress = (topic: SimulationTopic) => {
+  const handleTopicPress = (topic: PhysicsTopic) => {
     console.log('🔍 Topic pressed:', topic.name, topic.slug);
-    router.push({
-      pathname: '/simulasi/[slug]',
-      params: { slug: topic.slug }
-    });
+    
+    // ✅ Untuk gaya-gesek gunakan simulasi WebView Matter.js
+    if (topic.slug === 'gaya-gesek') {
+      router.push({
+        pathname: '/simulasi/webview/[slug]',
+        params: { slug: topic.slug }
+      });
+    } else {
+      // ✅ Untuk topic lain (sedang dikembangkan), gunakan route standard
+      router.push({
+        pathname: '/simulasi/[slug]',
+        params: { slug: topic.slug }
+      });
+    }
   };
 
   const filteredTopics = topics.filter(topic =>
     topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    topic.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (topic.description && topic.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const getDifficultyColor = (difficulty: string) => {
@@ -137,58 +103,78 @@ function SimulationContent() {
     }
   };
 
-  const renderTopicItem = ({ item }: { item: SimulationTopic }) => (
-    <TouchableOpacity
-      style={styles.topicCard}
-      onPress={() => handleTopicPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.topicHeader}>
-        <View style={styles.topicIconContainer}>
-          <Text style={styles.topicIcon}>{item.icon}</Text>
-        </View>
-        <View style={styles.topicInfo}>
-          <Text style={styles.topicName}>{item.name}</Text>
-          <Text style={styles.topicDescription}>{item.description}</Text>
-          <View style={styles.topicMeta}>
-            <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(item.difficulty) + '20' }]}>
-              <Text style={[styles.difficultyText, { color: getDifficultyColor(item.difficulty) }]}>
-                {item.difficulty}
-              </Text>
+  const getTopicIcon = (topic: PhysicsTopic) => {
+    if (topic.icon) return topic.icon;
+    // ✅ Icons untuk 4 topik
+    switch (topic.slug) {
+      case 'hukum-newton': return '⚡';
+      case 'energi-kinetik': return '💫';
+      case 'momentum': return '🎯';
+      case 'gaya-gesek': return '🔥';
+      default: return '🔬';
+    }
+  };
+
+  const getTopicStatus = (topic: PhysicsTopic) => {
+    // ✅ Gaya gesek ready dengan WebView, yang lain dalam pengembangan
+    if (topic.slug === 'gaya-gesek') {
+      return {
+        label: 'Ready',
+        color: '#10B981',
+        description: 'Interactive simulation available'
+      };
+    } else {
+      return {
+        label: 'In Development',
+        color: '#F59E0B',
+        description: 'Coming soon'
+      };
+    }
+  };
+
+  const renderTopicItem = ({ item }: { item: PhysicsTopic }) => {
+    const status = getTopicStatus(item);
+    
+    return (
+      <TouchableOpacity
+        style={styles.topicCard}
+        onPress={() => handleTopicPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.topicHeader}>
+          <View style={styles.topicIconContainer}>
+            <Text style={styles.topicIcon}>{getTopicIcon(item)}</Text>
+          </View>
+          <View style={styles.topicInfo}>
+            <Text style={styles.topicName}>{item.name}</Text>
+            <Text style={styles.topicSubtitle}>{item.subtitle}</Text>
+            {item.description && (
+              <Text style={styles.topicDescription}>{item.description}</Text>
+            )}
+            
+            <View style={styles.topicMeta}>
+              <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(item.difficulty) + '20' }]}>
+                <Text style={[styles.difficultyText, { color: getDifficultyColor(item.difficulty) }]}>
+                  {item.difficulty}
+                </Text>
+              </View>
+              <Text style={styles.duration}>⏱️ {item.estimated_duration} min</Text>
             </View>
-            <Text style={styles.duration}>⏱️ {item.estimated_duration} min</Text>
-            <Text style={styles.questionCount}>📝 {item.question_count} soal</Text>
           </View>
         </View>
-      </View>
-      
-      {item.progress && (
-        <View style={styles.progressContainer}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressText}>
-              Progress: {item.progress.completed_questions}/{item.progress.total_questions}
-            </Text>
-            <Text style={styles.progressPercentage}>
-              {item.progress.progress_percentage}%
+        
+        {/* Status Badge */}
+        <View style={styles.statusContainer}>
+          <View style={[styles.statusBadge, { backgroundColor: status.color + '20' }]}>
+            <Text style={[styles.statusText, { color: status.color }]}>
+              {status.label}
             </Text>
           </View>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill,
-                { width: `${item.progress.progress_percentage}%` }
-              ]}
-            />
-          </View>
-          {item.progress.best_score > 0 && (
-            <Text style={styles.bestScore}>
-              Best Score: {item.progress.best_score}/100
-            </Text>
-          )}
+          <Text style={styles.statusDescription}>{status.description}</Text>
         </View>
-      )}
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -207,7 +193,7 @@ function SimulationContent() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🔬 Simulasi Fisika</Text>
         <Text style={styles.headerSubtitle}>
-          {topics.length} simulasi interaktif tersedia
+          Interactive physics simulations
         </Text>
       </View>
 
@@ -222,32 +208,48 @@ function SimulationContent() {
         />
       </View>
 
+      {/* Error State */}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorTitle}>Connection Error</Text>
+          <Text style={styles.errorMessage}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadSimulationTopics}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Topics List */}
-      <FlatList
-        data={filteredTopics}
-        renderItem={renderTopicItem}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>🔍 No simulations found</Text>
-            <Text style={styles.emptyMessage}>
-              {searchQuery ? 'Try different keywords' : 'Check back later for new content'}
-            </Text>
-          </View>
-        }
-      />
+      {!error && (
+        <FlatList
+          data={filteredTopics}
+          renderItem={renderTopicItem}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyTitle}>🔍 No simulations found</Text>
+              <Text style={styles.emptyMessage}>
+                {searchQuery ? 'Try different keywords' : 'No simulation topics available'}
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
 
 export default function SimulationScreen() {
   return (
+    <AuthGuard>
       <SimulationContent />
+    </AuthGuard>
   );
 }
 
@@ -309,6 +311,42 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
 
+  // Error
+  errorContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: fonts.sizes.subtitle,
+    fontFamily: fonts.title,
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+  },
+
   // List
   listContainer: {
     padding: 20,
@@ -327,6 +365,7 @@ const styles = StyleSheet.create({
   topicHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    marginBottom: 16,
   },
   topicIconContainer: {
     width: 50,
@@ -349,11 +388,17 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginBottom: 4,
   },
-  topicDescription: {
+  topicSubtitle: {
     fontSize: fonts.sizes.body,
     fontFamily: fonts.body,
+    color: colors.secondary,
+    marginBottom: 4,
+  },
+  topicDescription: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
     color: colors.text,
-    lineHeight: 20,
+    lineHeight: 18,
     marginBottom: 12,
   },
   topicMeta: {
@@ -369,57 +414,36 @@ const styles = StyleSheet.create({
   },
   difficultyText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   duration: {
     fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
     color: colors.muted,
   },
-  questionCount: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.body,
-    color: colors.muted,
-  },
 
-  // Progress
-  progressContainer: {
-    marginTop: 16,
-    paddingTop: 16,
+  // Status
+  statusContainer: {
     borderTopWidth: 1,
     borderTopColor: colors.muted + '20',
-  },
-  progressHeader: {
+    paddingTop: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  progressText: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.text,
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  progressPercentage: {
-    fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
-    color: colors.primary,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: colors.muted + '30',
-    borderRadius: 3,
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: 6,
-    backgroundColor: colors.primary,
-    borderRadius: 3,
-  },
-  bestScore: {
+  statusText: {
     fontSize: fonts.sizes.small,
     fontFamily: fonts.body,
-    color: colors.accent,
+  },
+  statusDescription: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.muted,
   },
 
   // Empty

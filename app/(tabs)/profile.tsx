@@ -1,8 +1,6 @@
-// filepath: [profile.tsx](http://_vscodecontentref_/0)
 import { colors, fonts } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiService, User } from "@/services/api";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiService, SimulationAttempt, User, UserAchievement, UserProgress } from "@/services/api";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -16,23 +14,29 @@ import {
   View
 } from "react-native";
 
+// ✅ Interface sesuai dengan database fields yang tersedia
 interface ProfileStats {
   totalSimulations: number;
   averageScore: number;
-  totalTimeSpent: number;
+  totalTimeSpent: number; // dalam menit
   streakDays: number;
   achievementsCount: number;
   topicsCompleted: number;
+  totalAttempts: number;
+  bestScore: number;
 }
 
 export default function ProfileScreen() {
-  const { user, logout: authLogout } = useAuth(); // ✅ Langsung gunakan user tanpa cek auth
+  const { user, logout: authLogout } = useAuth();
   const router = useRouter();
 
   // State management
   const [profileData, setProfileData] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [userProgress, setUserProgress] = useState<UserProgress[]>([]);
+  const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
+  const [userAttempts, setUserAttempts] = useState<SimulationAttempt[]>([]);
   const [stats, setStats] = useState<ProfileStats>({
     totalSimulations: 0,
     averageScore: 0,
@@ -40,27 +44,28 @@ export default function ProfileScreen() {
     streakDays: 0,
     achievementsCount: 0,
     topicsCompleted: 0,
+    totalAttempts: 0,
+    bestScore: 0,
   });
 
   // ✅ Update profileData when user changes
   useEffect(() => {
     if (user) {
       setProfileData(user);
-      calculateStats(user);
+      calculateBasicStats(user);
     }
   }, [user]);
 
-  // ✅ Langsung load profile data tanpa cek auth
+  // ✅ Load complete profile data when screen is focused
   useFocusEffect(
     React.useCallback(() => {
       if (user) {
-        loadProfileData();
+        loadCompleteProfileData();
       }
     }, [user])
   );
 
-  const loadProfileData = async () => {
-    // ✅ Guard clause - pastikan user ada
+  const loadCompleteProfileData = async () => {
     if (!user) {
       console.warn('⚠️ No user data available for profile loading');
       return;
@@ -68,151 +73,88 @@ export default function ProfileScreen() {
 
     try {
       setLoading(true);
+      console.log('🔍 Loading complete profile data...');
 
-      // ✅ Gunakan getProfile dari api.ts
-      const response = await apiService.getProfile();
-      
-      if (response.status === 'success' && response.data) {
-        const userData = response.data.user;
+      // ✅ Parallel API calls sesuai dengan available routes
+      const [
+        profileResponse,
+        progressResponse,
+        achievementsResponse,
+        attemptsResponse
+      ] = await Promise.allSettled([
+        apiService.getProfile(),
+        apiService.getUserProgress(),
+        apiService.getUserAchievements(),
+        apiService.getUserAttempts()
+      ]);
+
+      // ✅ Handle profile data
+      if (profileResponse.status === 'fulfilled' && 
+          profileResponse.value.status === 'success' && 
+          profileResponse.value.data) {
+        
+        const userData = profileResponse.value.data.user;
         setProfileData(userData);
-        calculateStats(userData);
         console.log('✅ Profile data loaded:', userData.name);
       } else {
         console.log('⚠️ Profile API failed, using existing user data');
         setProfileData(user);
-        calculateStats(user);
       }
 
-    } catch (error) {
-      console.error('❌ Failed to load profile:', error);
-      // ✅ Fallback ke user data dari context
+      // ✅ Handle user progress
+      if (progressResponse.status === 'fulfilled' && 
+          progressResponse.value.status === 'success' && 
+          progressResponse.value.data) {
+        
+        setUserProgress(progressResponse.value.data.progress);
+        console.log('✅ User progress loaded:', progressResponse.value.data.progress.length, 'topics');
+      }
+
+      // ✅ Handle user achievements
+      if (achievementsResponse.status === 'fulfilled' && 
+          achievementsResponse.value.status === 'success' && 
+          achievementsResponse.value.data) {
+        
+        setUserAchievements(achievementsResponse.value.data.achievements);
+        console.log('✅ User achievements loaded:', achievementsResponse.value.data.achievements.length);
+      }
+
+      // ✅ Handle user attempts
+      if (attemptsResponse.status === 'fulfilled' && 
+          attemptsResponse.value.status === 'success' && 
+          attemptsResponse.value.data) {
+        
+        setUserAttempts(attemptsResponse.value.data.attempts);
+        console.log('✅ User attempts loaded:', attemptsResponse.value.data.attempts.length);
+      }
+
+      // ✅ Calculate comprehensive stats from all data
+      calculateStatsFromData(
+        profileData || user,
+        progressResponse.status === 'fulfilled' && progressResponse.value.status === 'success' 
+          ? progressResponse.value.data.progress : [],
+        achievementsResponse.status === 'fulfilled' && achievementsResponse.value.status === 'success'
+          ? achievementsResponse.value.data.achievements : [],
+        attemptsResponse.status === 'fulfilled' && attemptsResponse.value.status === 'success'
+          ? attemptsResponse.value.data.attempts : []
+      );
+
+    } catch (error: any) {
+      console.error('❌ Failed to load profile data:', error);
+      
+      // ✅ Fallback to existing data
       setProfileData(user);
-      calculateStats(user);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMockProfile = () => {
-    // ✅ Provide better fallback values
-    const mockProfile: User = {
-      id: 1,
-      name: "Demo User",
-      email: "demo@physicsplay.com",
-      level: 5,
-      total_xp: 1250,
-      streak_count: 7,
-      last_login_streak: new Date().toISOString(),
-      achievements: [],
-      progress: [],
-    };
-    
-    setProfileData(mockProfile);
-    calculateStats(mockProfile);
-  };
-
-  const calculateStats = (userData: User) => {
-    // ✅ Guard clause - pastikan userData ada
-    if (!userData) {
-      console.warn('⚠️ No user data provided for stats calculation');
-      return;
-    }
-
-    // Calculate stats from user data and progress
-    const achievements = userData.achievements || [];
-    const progress = userData.progress || [];
-    
-    const mockStats: ProfileStats = {
-      totalSimulations: progress.reduce((sum, p) => sum + (p.completed_questions || 0), 0) || 23,
-      averageScore: progress.length > 0 
-        ? Math.round(progress.reduce((sum, p) => sum + (p.best_score || 0), 0) / progress.length)
-        : 87,
-      totalTimeSpent: 145, // minutes - mock data
-      streakDays: userData.streak_count || 0,
-      achievementsCount: achievements.length || 8,
-      topicsCompleted: progress.filter(p => p.is_completed).length || 4,
-    };
-    
-    setStats(mockStats);
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadProfileData();
-    setRefreshing(false);
-  };
-
-  const handleLogout = () => {
-    Alert.alert(
-      "Konfirmasi Logout",
-      "Apakah Anda yakin ingin keluar dari akun ini?",
-      [
-        { 
-          text: "Batal", 
-          style: "cancel" 
-        },
-        { 
-          text: "Ya, Keluar", 
-          style: "destructive",
-          onPress: performLogout
-        },
-      ]
-    );
-  };
-
-  const performLogout = async () => {
-    try {
-      setLoading(true);
-      console.log('🚪 Starting logout process...');
+      calculateBasicStats(user);
       
-      // 1. ✅ Clear ALL AsyncStorage data first
-      await AsyncStorage.clear();
-      console.log('✅ AsyncStorage cleared completely');
-      
-      // 2. Try API logout (optional, jangan biarkan gagal)
-      try {
-        await apiService.logout();
-        console.log('✅ API logout successful');
-      } catch (apiError) {
-        console.warn('⚠️ API logout failed, but continuing with local logout:', apiError);
-      }
-      
-      // 3. Call AuthContext logout (untuk update state)
-      try {
-        await authLogout();
-        console.log('✅ AuthContext logout successful');
-      } catch (contextError) {
-        console.warn('⚠️ AuthContext logout failed, but storage is cleared:', contextError);
-      }
-      
-      // 4. ✅ Force navigate dengan delay untuk memastikan
-      setTimeout(() => {
-        router.replace("/onboarding");
-        console.log('✅ Navigation to onboarding completed');
-      }, 100);
-      
-    } catch (error) {
-      console.error('❌ Logout error:', error);
-      
-      // ✅ Emergency fallback - force clear everything
-      try {
-        await AsyncStorage.clear();
-        setTimeout(() => {
-          router.replace("/onboarding");
-        }, 100);
-        console.log('✅ Emergency logout completed');
-      } catch (emergencyError) {
-        console.error('❌ Emergency logout failed:', emergencyError);
+      if (error.message?.includes('Session expired') || 
+          error.message?.includes('Token expired')) {
         Alert.alert(
-          "Logout Error", 
-          "Terjadi kesalahan saat logout. Silakan restart aplikasi.",
+          'Session Expired',
+          'Your session has expired. Please login again.',
           [
             {
-              text: "OK",
-              onPress: () => {
-                // Force navigate anyway
-                router.replace("/onboarding");
-              }
+              text: 'Login',
+              onPress: () => performLogout()
             }
           ]
         );
@@ -222,64 +164,170 @@ export default function ProfileScreen() {
     }
   };
 
-  const forceReset = async () => {
-    try {
-      console.log('🔧 Force reset initiated...');
-      await AsyncStorage.clear();
-      router.replace("/onboarding");
-      console.log('✅ Force reset completed');
-    } catch (error) {
-      console.error('❌ Force reset failed:', error);
-      Alert.alert("Error", "Failed to reset. Please restart the app.");
+  // ✅ Calculate basic stats from user data only - FIXED field names
+  const calculateBasicStats = (userData: User) => {
+    if (!userData) {
+      console.warn('⚠️ No user data provided for basic stats calculation');
+      return;
     }
+
+    const basicStats: ProfileStats = {
+      totalSimulations: 0, // Will be calculated from progress data
+      averageScore: 0, // Will be calculated from attempts data
+      totalTimeSpent: 0, // Will be calculated from attempts data
+      streakDays: userData.streak_days || 0, // ✅ FIXED: streak_days from users table
+      achievementsCount: 0, // Will be calculated from achievements data
+      topicsCompleted: 0, // Will be calculated from progress data
+      totalAttempts: 0, // Will be calculated from attempts data
+      bestScore: 0, // Will be calculated from progress data
+    };
+    
+    setStats(basicStats);
   };
 
-  
+  // ✅ Calculate comprehensive stats from all API data - FIXED calculations
+  const calculateStatsFromData = (
+    userData: User,
+    progress: UserProgress[],
+    achievements: UserAchievement[],
+    attempts: SimulationAttempt[]
+  ) => {
+    if (!userData) {
+      console.warn('⚠️ No user data provided for comprehensive stats calculation');
+      return;
+    }
+
+    // ✅ Calculate from user_progress table
+    const totalSimulations = progress.reduce((sum, p) => sum + (p.completed_questions || 0), 0);
+    const topicsCompleted = progress.filter(p => p.is_completed).length;
+    const bestScore = progress.length > 0 
+      ? Math.max(...progress.map(p => p.best_score || 0))
+      : 0;
+
+    // ✅ Calculate from simulation_attempts table - FIXED time calculation
+    const totalAttempts = attempts.length;
+    const totalTimeSpent = attempts.reduce((sum, attempt) => sum + (attempt.time_taken || 0), 0) / 60; // Convert to minutes
+    const averageScore = totalAttempts > 0
+      ? Math.round(attempts.reduce((sum, attempt) => sum + (attempt.score_earned || 0), 0) / totalAttempts)
+      : 0;
+
+    // ✅ Calculate from user_achievements table
+    const achievementsCount = achievements.length;
+
+    const comprehensiveStats: ProfileStats = {
+      totalSimulations,
+      averageScore,
+      totalTimeSpent: Math.round(totalTimeSpent),
+      streakDays: userData.streak_days || 0, // ✅ FIXED: streak_days from users table
+      achievementsCount,
+      topicsCompleted,
+      totalAttempts,
+      bestScore,
+    };
+    
+    setStats(comprehensiveStats);
+    console.log('✅ Comprehensive stats calculated:', comprehensiveStats);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadCompleteProfileData();
+    setRefreshing(false);
+  };
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive',
+          onPress: performLogout 
+        }
+      ]
+    );
+  };
+
+  const performLogout = async () => {
+    try {
+      await authLogout();
+      router.replace('/auth/login');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+    }
+  };
 
   const handleViewAchievements = () => {
     router.push('/(tabs)/achievements');
   };
 
   const handleViewProgress = () => {
-    router.push('/(tabs)/topics');
+    router.push('/(tabs)/progress');
   };
 
-  const getInitials = (name: string) => {
-    if (!name || typeof name !== 'string') return 'U';
-    
+  const getInitials = (name?: string) => {
+    if (!name) return '??';
     return name
       .split(' ')
-      .map(word => word.charAt(0))
+      .map(word => word.charAt(0).toUpperCase())
       .join('')
-      .toUpperCase()
-      .slice(0, 2);
+      .substring(0, 2);
   };
 
-  const getLevelProgress = (xp: number) => {
-    const safeXP = xp || 0;
-    const baseXP = 100;
-    const currentLevel = Math.floor(safeXP / baseXP) + 1;
-    const xpInCurrentLevel = safeXP % baseXP;
-    const xpForNextLevel = baseXP;
-    const progressPercentage = (xpInCurrentLevel / xpForNextLevel) * 100;
+  const getLevelProgress = (totalXp: number) => {
+    const currentLevel = Math.floor(totalXp / 1000);
+    const xpInCurrentLevel = totalXp % 1000;
+    const xpForNextLevel = 1000;
+    const progressPercentage = Math.round((xpInCurrentLevel / xpForNextLevel) * 100);
     
     return {
       currentLevel,
       xpInCurrentLevel,
       xpForNextLevel,
-      progressPercentage: Math.min(progressPercentage, 100)
+      progressPercentage
     };
   };
 
   const formatTime = (minutes: number) => {
-    const safeMins = minutes || 0;
-    const hours = Math.floor(safeMins / 60);
-    const mins = safeMins % 60;
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    if (minutes < 60) {
+      return `${minutes}m`;
+    }
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
   };
 
-  // ✅ Show loading while auth is still checking
+  const forceReset = () => {
+    setStats({
+      totalSimulations: 0,
+      averageScore: 0,
+      totalTimeSpent: 0,
+      streakDays: 0,
+      achievementsCount: 0,
+      topicsCompleted: 0,
+      totalAttempts: 0,
+      bestScore: 0,
+    });
+    setUserProgress([]);
+    setUserAchievements([]);
+    setUserAttempts([]);
+    loadCompleteProfileData();
+  };
 
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Unknown';
+    try {
+      return new Date(dateString).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return 'Unknown';
+    }
+  };
 
   // ✅ Show loading if profile data is not ready
   if (!profileData) {
@@ -306,6 +354,9 @@ export default function ProfileScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>👤 Profil Saya</Text>
+        {loading && (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        )}
       </View>
 
       {/* Profile Card */}
@@ -325,7 +376,7 @@ export default function ProfileScreen() {
           
           <View style={styles.levelContainer}>
             <View style={styles.levelBadge}>
-              <Text style={styles.levelText}>Level {levelProgress.currentLevel}</Text>
+              <Text style={styles.levelText}>Level {profileData.level}</Text>
             </View>
             <Text style={styles.xpText}>
               {profileData.total_xp || 0} XP
@@ -352,7 +403,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Stats Grid */}
+      {/* Stats Grid - ✅ Using real data from database */}
       <View style={styles.statsContainer}>
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
@@ -362,7 +413,7 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statIcon}>📊</Text>
-            <Text style={styles.statNumber}>{stats.averageScore}%</Text>
+            <Text style={styles.statNumber}>{stats.averageScore}</Text>
             <Text style={styles.statLabel}>Avg Score</Text>
           </View>
         </View>
@@ -392,37 +443,73 @@ export default function ProfileScreen() {
             <Text style={styles.statLabel}>Topics Done</Text>
           </View>
         </View>
+
+        {/* ✅ Additional stats row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>📝</Text>
+            <Text style={styles.statNumber}>{stats.totalAttempts}</Text>
+            <Text style={styles.statLabel}>Total Attempts</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>⭐</Text>
+            <Text style={styles.statNumber}>{stats.bestScore}</Text>
+            <Text style={styles.statLabel}>Best Score</Text>
+          </View>
+        </View>
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={handleViewAchievements}
-        >
-          <Text style={styles.actionIcon}>🏆</Text>
-          <Text style={styles.actionText}>View Achievements</Text>
-          <Text style={styles.actionArrow}>›</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={handleViewProgress}
-        >
-          <Text style={styles.actionIcon}>📈</Text>
-          <Text style={styles.actionText}>Learning Progress</Text>
-          <Text style={styles.actionArrow}>›</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={() => router.push('/(tabs)/challenges')}
-        >
-          <Text style={styles.actionIcon}>🎯</Text>
-          <Text style={styles.actionText}>Daily Challenges</Text>
-          <Text style={styles.actionArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Recent Activity */}
+      {userAttempts.length > 0 && (
+        <View style={styles.activityContainer}>
+          <Text style={styles.sectionTitle}>📈 Recent Activity</Text>
+          {userAttempts.slice(0, 3).map((attempt) => (
+            <View key={attempt.id} style={styles.activityItem}>
+              <Text style={styles.activityIcon}>
+                {attempt.is_correct ? '✅' : '❌'}
+              </Text>
+              <View style={styles.activityInfo}>
+                <Text style={styles.activityTitle}>
+                  {attempt.question?.topic?.name || 'Simulation'}
+                </Text>
+                <Text style={styles.activityDesc}>
+                  Score: {attempt.score_earned} • Attempt #{attempt.attempt_number} • {formatDate(attempt.created_at)}
+                </Text>
+              </View>
+              <Text style={styles.activityScore}>
+                {attempt.score_earned}pts
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Progress Summary */}
+      {userProgress.length > 0 && (
+        <View style={styles.progressContainer}>
+          <Text style={styles.sectionTitle}>📚 Topic Progress</Text>
+          {userProgress.slice(0, 3).map((progress) => (
+            <View key={progress.id} style={styles.progressItem}>
+              <View style={styles.progressInfo}>
+                <Text style={styles.progressName}>
+                  {progress.topic?.name || 'Unknown Topic'}
+                </Text>
+                <Text style={styles.progressDesc}>
+                  {progress.completed_questions}/{progress.total_questions} questions • Best: {progress.best_score}%
+                </Text>
+              </View>
+              <View style={styles.progressBadge}>
+                <Text style={[
+                  styles.progressStatus,
+                  { color: progress.is_completed ? '#10B981' : colors.muted }
+                ]}>
+                  {progress.is_completed ? '✅' : '📊'}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Streak Info */}
       {stats.streakDays > 0 && (
@@ -440,13 +527,40 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* ✅ Debug Button - Hapus di production */}
-      <TouchableOpacity 
-        style={styles.debugButton} 
-        onPress={forceReset}
-      >
-        <Text style={styles.debugText}>🔧 Force Reset (Debug)</Text>
-      </TouchableOpacity>
+      {/* Action Buttons */}
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity 
+          style={styles.actionButton} 
+          onPress={handleViewAchievements}
+        >
+          <Text style={styles.actionIcon}>🏆</Text>
+          <Text style={styles.actionText}>View Achievements</Text>
+          <Text style={styles.actionArrow}>›</Text>
+        </TouchableOpacity>
+        
+        
+        <TouchableOpacity 
+          style={styles.actionButton} 
+          onPress={() => router.push('/(tabs)/challenges')}
+        >
+          <Text style={styles.actionIcon}>🎯</Text>
+          <Text style={styles.actionText}>Daily Challenges</Text>
+          <Text style={styles.actionArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Debug Section */}
+      {__DEV__ && (
+        <View style={styles.debugContainer}>
+          <Text style={styles.debugTitle}>🔧 Debug Info</Text>
+          <Text style={styles.debugText}>Progress items: {userProgress.length}</Text>
+          <Text style={styles.debugText}>Achievements: {userAchievements.length}</Text>
+          <Text style={styles.debugText}>Attempts: {userAttempts.length}</Text>
+          <TouchableOpacity style={styles.debugButton} onPress={forceReset}>
+            <Text style={styles.debugButtonText}>Force Reset</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Logout Button */}
       <TouchableOpacity 
@@ -465,8 +579,8 @@ export default function ProfileScreen() {
       <View style={styles.footer}>
         <Text style={styles.footerText}>PhysicsPlay v1.0.0</Text>
         <Text style={styles.footerSubtext}>
-          Last login: {profileData.last_login_streak ? 
-            new Date(profileData.last_login_streak).toLocaleDateString('id-ID') : 
+          Last activity: {profileData.last_activity_date ? 
+            formatDate(profileData.last_activity_date) : 
             'Unknown'
           }
         </Text>
@@ -478,44 +592,11 @@ export default function ProfileScreen() {
   );
 }
 
-// ✅ Styles tetap sama
+// ✅ Enhanced styles with new components
 const styles = StyleSheet.create({
-  // ... (styles tetap sama seperti sebelumnya)
   container: { 
     flex: 1, 
     backgroundColor: colors.background,
-  },
-
-  // Auth Prompt
-  authPrompt: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  authTitle: {
-    fontSize: fonts.sizes.title,
-    fontFamily: fonts.title,
-    color: colors.primary,
-    marginBottom: 12,
-  },
-  authMessage: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
-    color: colors.muted,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  authButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  authButtonText: {
-    color: '#FFFFFF',
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
   },
 
   // Loading
@@ -547,12 +628,6 @@ const styles = StyleSheet.create({
     fontSize: fonts.sizes.title,
     fontFamily: fonts.title,
     color: '#FFFFFF',
-  },
-  editButton: {
-    fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    opacity: 0.9,
   },
 
   // Profile Card
@@ -626,11 +701,11 @@ const styles = StyleSheet.create({
   levelText: {
     color: colors.accent,
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
   xpText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
 
@@ -648,7 +723,7 @@ const styles = StyleSheet.create({
   },
   progressTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
     marginBottom: 12,
   },
@@ -709,6 +784,91 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  // Recent Activity
+  activityContainer: {
+    paddingHorizontal: 20,
+    marginTop: 24,
+  },
+  sectionTitle: {
+    fontSize: fonts.sizes.subtitle,
+    fontFamily: fonts.title,
+    color: colors.primary,
+    marginBottom: 16,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+  },
+  activityIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  activityInfo: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  activityDesc: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.muted,
+  },
+  activityScore: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.accent,
+  },
+
+  // Progress Section
+  progressContainer: {
+    paddingHorizontal: 20,
+    marginTop: 24,
+  },
+  progressItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+  },
+  progressInfo: {
+    flex: 1,
+  },
+  progressName: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  progressDesc: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.muted,
+  },
+  progressBadge: {
+    marginLeft: 12,
+  },
+  progressStatus: {
+    fontSize: 20,
+  },
+
   // Actions
   actionsContainer: {
     paddingHorizontal: 20,
@@ -733,7 +893,7 @@ const styles = StyleSheet.create({
   actionText: {
     flex: 1,
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
   actionArrow: {
@@ -766,7 +926,7 @@ const styles = StyleSheet.create({
   },
   streakTitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     color: colors.primary,
   },
   streakDescription: {
@@ -783,25 +943,43 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Debug Button
-  debugButton: {
+  // Debug
+  debugContainer: {
     marginHorizontal: 20,
-    marginTop: 16,
-    backgroundColor: "#9333EA",
-    padding: 12,
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: colors.muted + '20',
     borderRadius: 8,
-    alignItems: "center",
+  },
+  debugTitle: {
+    fontSize: fonts.sizes.body,
+    fontFamily: fonts.body,
+    color: colors.primary,
+    marginBottom: 8,
   },
   debugText: {
+    fontSize: fonts.sizes.small,
+    fontFamily: fonts.body,
+    color: colors.muted,
+    marginBottom: 2,
+  },
+  debugButton: {
+    marginTop: 8,
+    backgroundColor: "#9333EA",
+    padding: 8,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  debugButtonText: {
     color: "#FFFFFF",
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
 
   // Logout Button
   logoutButton: {
     marginHorizontal: 20,
-    marginTop: 16,
+    marginTop: 24,
     backgroundColor: "#EF4444",
     padding: 18,
     borderRadius: 12,
@@ -819,7 +997,7 @@ const styles = StyleSheet.create({
   logoutText: {
     color: "#FFFFFF",
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
   },
 
   // Footer
@@ -831,7 +1009,7 @@ const styles = StyleSheet.create({
   footerText: {
     color: colors.muted,
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.body,
     marginBottom: 4,
   },
   footerSubtext: {
