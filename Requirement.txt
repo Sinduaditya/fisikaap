@@ -1,10 +1,10 @@
-LARAVEL BELAJAR FISIKA - CONSISTENCY GUIDE
+LARAVEL BELAJAR FISIKA - FINAL REQUIREMENT
 ==========================================
 
 AVAILABLE CONTROLLERS:
 ======================
 1. AuthController (register, login, profile, logout)
-2. SimulationController (getTopics, getQuestion, submitAnswer)
+2. SimulationController (getTopics, getTopicDetail, getTopicQuestions, getSimulationView, getQuestion, submitAnswer, getNextQuestion)
 
 AVAILABLE MODELS & DATABASE STRUCTURE:
 ======================================
@@ -33,7 +33,7 @@ AVAILABLE MODELS & DATABASE STRUCTURE:
    Fields:
    - id (bigint, primary key)
    - name (varchar) // Newton II, Energi Kinetik, Momentum
-   - slug (varchar, unique) // newton_second_law, kinetic_energy, momentum
+   - slug (varchar, unique) // hukum_newton, energi_kinetik, momentum, gaya-gesek
    - subtitle (varchar) // F = m × a, Ek = ½mv², p = m × v
    - description (text)
    - difficulty (enum: 'Beginner', 'Intermediate', 'Advanced')
@@ -52,7 +52,7 @@ AVAILABLE MODELS & DATABASE STRUCTURE:
    - id (bigint, primary key)
    - physics_topic_id (foreign key -> physics_topics.id, cascade delete)
    - question_text (text)
-   - simulation_type (varchar) // newton_second_law, kinetic_energy, momentum
+   - simulation_type (varchar) // hukum_newton, energi_kinetik, momentum, gaya_gesek
    - parameters (json) // mass, velocity, friction, dll
    - evaluation_criteria (json) // target_variable, target_value, tolerance
    - hints (json, nullable) // Array of hints
@@ -213,14 +213,22 @@ PROTECTED ROUTES (auth:sanctum):
 - GET /api/auth/profile
 - POST /api/auth/logout
 
+**EXISTING SIMULATION ROUTES:**
 - GET /api/simulation/topics
-- GET /api/simulation/topics/{topicSlug}/question
+
+**NEW SIMULATION ROUTES (ADDED):**
+- GET /api/simulation/topics/{topicSlug}
+- GET /api/simulation/topics/{topicSlug}/questions
+- GET /api/simulation/topics/{topicSlug}/simulation
+- GET /api/simulation/questions/{questionId}
 - POST /api/simulation/questions/{questionId}/submit
+- GET /api/simulation/questions/{questionId}/next
 
 - GET /api/user/
 - GET /api/user/achievements
 - GET /api/user/progress
 - GET /api/user/attempts
+- GET /api/user/progress/{topicSlug}
 
 - GET /api/topics/
 - GET /api/topics/{slug}
@@ -247,6 +255,228 @@ JSON FIELD STRUCTURES:
 - simulation_attempts.simulation_data: {"final_velocity": 12.5, "distance_traveled": 31.25}
 - achievements.criteria: {"type": "streak", "value": 7, "condition": ">="}
 
+**===== NEW ADDED FEATURES =====**
+
+SIMULATION ARCHITECTURE UPDATE:
+===============================
+1. **Backend Laravel**: Menyediakan API dan Blade views untuk simulasi
+2. **Blade Views**: Matter.js simulation per topic (resources/views/simulations/{topic_slug}.blade.php)
+3. **React Native**: WebView untuk menampilkan simulasi + native navigation
+
+UPDATED SIMULATIONCONTROLLER METHODS:
+====================================
+
+**NEW METHODS ADDED:**
+```php
+// Get topic detail with simulation info
+getTopicDetail($topicSlug)
+
+// Get all questions for a topic (for React Native flow)
+getTopicQuestions($topicSlug)
+
+// Get simulation view HTML for WebView
+getSimulationView($topicSlug)
+
+// Get specific question with current progress
+getQuestion($questionId)
+
+// Get next question in the topic
+getNextQuestion($questionId)
+
+// Evaluate user answer against criteria (private)
+evaluateAnswer($userAnswer, $criteria)
+
+// Update user progress for topic (private)
+updateUserProgress($user, $question, $evaluationResult)
+```
+
+**ENHANCED EXISTING METHODS:**
+```php
+// Enhanced getTopics() - returns simulation info
+getTopics()
+
+// Enhanced submitAnswer() - with evaluation and progress tracking
+submitAnswer(Request $request, $questionId)
+```
+
+BLADE SIMULATION VIEWS STRUCTURE:
+=================================
+**Location**: resources/views/simulations/
+**Required Files**:
+- newton_second_law.blade.php
+- kinetic_energy.blade.php  
+- momentum.blade.php
+- {physics_topics.slug}.blade.php
+
+**Each simulation view must include**:
+- Matter.js physics engine setup
+- Interactive controls (sliders, buttons, inputs)
+- Real-time physics calculations display
+- WebView communication via postMessage
+- Question parameter integration
+- Answer collection mechanism
+- Reset/restart functionality
+
+WEBVIEW COMMUNICATION PROTOCOL:
+==============================
+**React Native -> WebView:**
+```javascript
+// Inject question data
+window.postMessage(JSON.stringify({
+  type: 'LOAD_QUESTION',
+  question: questionData
+}));
+```
+
+**WebView -> React Native:**
+```javascript
+// Submit answer
+window.ReactNativeWebView.postMessage(JSON.stringify({
+  type: 'SUBMIT_ANSWER',
+  data: {
+    user_answer: {...},
+    simulation_data: {...},
+    time_taken: 45.2
+  }
+}));
+```
+
+NEW API RESPONSE FORMATS:
+========================
+
+**Topic Detail with Simulation:**
+```json
+{
+  "status": "success",
+  "data": {
+    "topic": {...},
+    "questions_count": 5,
+    "user_progress": {...},
+    "simulation_view": "simulations.newton_second_law"
+  }
+}
+```
+
+**Question with Progress:**
+```json
+{
+  "status": "success", 
+  "data": {
+    "question": {...},
+    "attempt_number": 1,
+    "simulation_view": "simulations.newton_second_law"
+  }
+}
+```
+
+**Next Question Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "next_question": {...} | null,
+    "topic_completed": false | true,
+    "message": "Next question loaded" | "Topic completed!"
+  }
+}
+```
+
+**Enhanced Submit Answer Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "attempt": {...},
+    "is_correct": true,
+    "score_earned": 95,
+    "feedback": "Excellent! Well done!"
+  }
+}
+```
+
+SIMULATION FLOW LOGIC:
+=====================
+1. User memilih topic dari list topics
+2. API getTopicDetail() mengembalikan topic info + simulation_view path
+3. React Native load WebView dengan URL simulation/{topicSlug}
+4. User menjalankan simulasi di WebView (Matter.js)
+5. WebView communicate dengan React Native via postMessage
+6. React Native kirim answer ke API submitAnswer()
+7. API evaluate answer dan return feedback + progress update
+8. Jika benar: call getNextQuestion() untuk auto progression
+9. Jika salah: show feedback dan allow retry
+10. Track progress hingga topic completion
+
+QUESTION PROGRESSION SYSTEM:
+===========================
+- Questions diurutkan berdasarkan ID ascending
+- User harus menjawab benar untuk lanjut ke question berikutnya
+- Progress tracking per question dan per topic
+- Topic completion ketika semua questions dijawab benar
+- Retry system untuk questions yang salah
+
+WEB ROUTES ADDITION (REQUIRED):
+==============================
+**Add to routes/web.php:**
+```php
+Route::get('simulation/{topicSlug}', function ($topicSlug) {
+    $topic = \App\Models\PhysicsTopic::where('slug', $topicSlug)->firstOrFail();
+    return view("simulations.{$topic->slug}", compact('topic'));
+});
+```
+
+MATTER.JS SIMULATION REQUIREMENTS:
+=================================
+**Required Features per Simulation:**
+- Physics engine setup dengan gravity/constraints yang sesuai
+- Interactive elements (sliders untuk force, mass, velocity)
+- Real-time calculations dan value display
+- Visual feedback (object movement, collisions, trajectories)
+- Question-specific parameter integration
+- Answer collection via forms/inputs
+- Reset/restart simulation functionality
+- Progress indicators dan visual cues
+
+**Example Implementations:**
+1. **Newton Second Law**: Force slider, mass input, acceleration display
+2. **Kinetic Energy**: Velocity controls, mass slider, energy calculations
+3. **Momentum**: Multiple objects, collision scenarios, conservation demos
+
+EVALUATION SYSTEM ENHANCEMENTS:
+==============================
+**Enhanced evaluation_criteria format:**
+```json
+{
+  "target_variable": "acceleration",
+  "target_value": 2.5,
+  "tolerance": 0.1,
+  "partial_credit": true,
+  "time_bonus": {
+    "max_time": 60,
+    "bonus_points": 10
+  }
+}
+```
+
+**Scoring Algorithm:**
+- Correct answer: 100 points base
+- Within tolerance: Full score
+- Outside tolerance: Graduated reduction
+- Time bonus: Additional points for quick answers
+- Attempt penalty: Reduction for multiple attempts
+
+REACT NATIVE INTEGRATION REQUIREMENTS:
+=====================================
+**WebView Component Setup:**
+1. Load simulation URL dalam WebView
+2. Inject question data via injectedJavaScript
+3. Listen for postMessage events dari simulation
+4. Handle answer submission ke API
+5. Show native feedback overlays
+6. Progress tracking dan topic completion UI
+7. Native navigation between questions
+8. Error handling untuk WebView communication
+
 FORBIDDEN ACTIONS:
 ==================
 ❌ DO NOT add fields that don't exist in migrations
@@ -261,6 +491,8 @@ FORBIDDEN ACTIONS:
 ❌ DO NOT add joins or complex queries without proper relationships
 ❌ DO NOT use mock data, dummy data, or hardcoded fake data in responses
 ❌ DO NOT return static arrays or sample data instead of real database queries
+❌ **DO NOT modify existing database structure or API behavior**
+❌ **DO NOT change existing routes or method signatures**
 
 REQUIRED ACTIONS:
 =================
@@ -273,6 +505,21 @@ REQUIRED ACTIONS:
 ✅ ALWAYS validate required fields before database operations
 ✅ ALWAYS query real data from database using proper Eloquent models
 ✅ ALWAYS use actual database relationships and models for data retrieval
+✅ **ENHANCE existing methods instead of replacing them**
+✅ **ADD new methods to existing controllers**
+✅ **CREATE new blade views for simulations**
+✅ **IMPLEMENT WebView communication properly**
+
+IMPLEMENTATION PRIORITY ORDER:
+=============================
+1. **Phase 1**: SimulationController sudah complete dengan new methods
+2. **Phase 2**: Create basic Blade simulation templates dengan Matter.js
+3. **Phase 3**: Test all new API endpoints
+4. **Phase 4**: Implement WebView integration di React Native
+5. **Phase 5**: Add WebView communication protocol
+6. **Phase 6**: Implement question progression logic
+7. **Phase 7**: Add progress tracking enhancements
+8. **Phase 8**: Polish UI/UX dan error handling
 
 FOREIGN KEY RELATIONSHIPS:
 ===========================
@@ -304,6 +551,11 @@ ALWAYS REFERENCE THIS FILE BEFORE:
 - Adding new features
 - Writing seeders
 - Creating API responses
+- Implementing WebView features
+- Creating Matter.js simulations
 
-LAST UPDATED: 2025-09-30
-TOTAL TABLES: 14 (8 application tables + 6 Laravel system tables)
+**LAST UPDATED**: 2025-10-05  
+**TOTAL TABLES**: 14 (8 application tables + 6 Laravel system tables)  
+**NEW FEATURES**: Matter.js Simulations, WebView Integration, Enhanced Question Flow, Auto Progression  
+**VERSION**: 2.0 (Complete Simulation System)  
+**STATUS**: SimulationController Complete, Blade Views Required, WebView Integration Pending

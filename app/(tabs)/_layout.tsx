@@ -1,4 +1,4 @@
-import { AuthGuard } from "@/components/AuthGuard"; // ✅ Keep only ONE AuthGuard here
+import { AuthGuard } from "@/components/AuthGuard";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { colors } from "@/constants/theme";
@@ -9,7 +9,6 @@ import { StyleSheet, View } from "react-native";
 export default function TabLayout() {
   return (
     <AuthGuard>
-      {/* ✅ Single AuthGuard protects ALL tabs */}
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -22,63 +21,69 @@ export default function TabLayout() {
           tabBarItemStyle: styles.tabItem,
         }}
       >
+        {/* ✅ Main visible tabs */}
         <Tabs.Screen
           name="index"
           options={{
-        title: "Home",
-        tabBarIcon: ({ color }) => (
-          <View style={styles.iconWrap}>
-            <IconSymbol size={24} name="house" color={color} />
-          </View>
-        ),
+            title: "Home",
+            tabBarIcon: ({ color }) => (
+              <View style={styles.iconWrap}>
+                <IconSymbol size={24} name="house" color={color} />
+              </View>
+            ),
           }}
         />
+        
         <Tabs.Screen
           name="topics"
           options={{
-        title: "Topics",
-        tabBarIcon: ({ color }) => (
-            <View style={styles.iconWrap}>
-            <IconSymbol size={24} name="book" color={color} />
-            </View>
-          ),
+            title: "Topics",
+            tabBarIcon: ({ color }) => (
+              <View style={styles.iconWrap}>
+                <IconSymbol size={24} name="book" color={color} />
+              </View>
+            ),
           }}
         />
-        <Tabs.Screen
-          name="achievements"
-          options={{
-          title: "Achievement",
-          href: null, // This hides the tab from being displayed
-          tabBarIcon: ({ color }) => (
-            <View style={styles.iconWrap}>
-            <IconSymbol size={24} name="trophy" color={color} />
-            </View>
-          ),
-          }}
-        />
+        
         <Tabs.Screen
           name="profile"
           options={{
             title: "Profile",
-          tabBarIcon: ({ color }) => (
-          <View style={styles.iconWrap}>
-            <IconSymbol size={24} name="person" color={color} />
-          </View>
-        ),
+            tabBarIcon: ({ color }) => (
+              <View style={styles.iconWrap}>
+                <IconSymbol size={24} name="person" color={color} />
+              </View>
+            ),
           }}
         />
-      <Tabs.Screen
-        name="challenges"
-        options={{
-        title: "Challenges",
-        href: null, // This hides the tab from being displayed
-        tabBarIcon: ({ color }) => (
-          <View style={styles.iconWrap}>
-          <IconSymbol size={24} name="target" color={color} />
-          </View>
-        ),
-        }}
-      />
+
+        {/* ✅ Hidden tabs (accessible programmatically) */}
+        <Tabs.Screen
+          name="achievements"
+          options={{
+            title: "Achievement",
+            href: null, // Hidden from tab bar
+            tabBarIcon: ({ color }) => (
+              <View style={styles.iconWrap}>
+                <IconSymbol size={24} name="trophy" color={color} />
+              </View>
+            ),
+          }}
+        />
+        
+        <Tabs.Screen
+          name="challenges"
+          options={{
+            title: "Challenges",
+            href: null, // Hidden from tab bar
+            tabBarIcon: ({ color }) => (
+              <View style={styles.iconWrap}>
+                <IconSymbol size={24} name="target" color={color} />
+              </View>
+            ),
+          }}
+        />
       </Tabs>
     </AuthGuard>
   );

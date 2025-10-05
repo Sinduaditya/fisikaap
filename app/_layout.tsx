@@ -52,13 +52,59 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <Stack screenOptions={{ headerShown: false }}>
+        {/* ✅ Main entry point */}
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        
+        {/* ✅ Onboarding & Auth */}
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
         <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+        
+        {/* ✅ Main app tabs */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="simulasi" options={{ headerShown: false }} />
-        <Stack.Screen name="topics" options={{ headerShown: false }} />
+        
+        {/* ✅ Modal screens */}
+        <Stack.Screen 
+          name="modal" 
+          options={{ 
+            headerShown: false,
+            presentation: 'modal'
+          }} 
+        />
+        
+        {/* ✅ Simulation routes (FIXED) */}
+        <Stack.Screen 
+          name="simulation/index" 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="simulation/[slug]" 
+          options={{ 
+            headerShown: false,
+            title: 'Simulation'
+          }} 
+        />
+        <Stack.Screen 
+          name="simulation/question/[id]" 
+          options={{ 
+            headerShown: false,
+            title: 'Question Detail'
+          }} 
+        />
+        
+        {/* ✅ Topics routes (FIXED) */}
+        <Stack.Screen 
+          name="topics/index" 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="topics/[slug]" 
+          options={{ 
+            headerShown: false,
+            title: 'Topic Detail'
+          }} 
+        />
+        
       </Stack>
     </AuthProvider>
   );

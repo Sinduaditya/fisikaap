@@ -52,7 +52,6 @@ export default function TopicDetailScreen() {
         console.log('✅ Topic loaded:', topicResponse.value.data.topic.name);
       } else {
         console.log('⚠️ Topic API failed, using mock data');
-        loadMockTopic();
       }
 
       // Handle questions response
@@ -63,163 +62,16 @@ export default function TopicDetailScreen() {
         console.log('✅ Questions loaded:', questionsResponse.value.data.questions?.length || 0);
       } else {
         console.log('⚠️ Questions API failed, using mock data');
-        loadMockQuestions();
       }
-
     } catch (error) {
       console.error('❌ Failed to load topic detail:', error);
-      // Fallback dengan mock data
-      loadMockTopic();
-      loadMockQuestions();
     } finally {
       setLoading(false);
     }
   };
 
-  const loadMockTopic = () => {
-    const mockTopics = {
-      'hukum-newton': {
-        id: 1,
-        name: "Hukum Newton II",
-        slug: "hukum-newton",
-        subtitle: "F = m × a",
-        difficulty: "Beginner",
-        estimated_duration: 15,
-        icon: "⚡",
-        order_index: 1,
-        progress: {
-          completed_questions: 3,
-          total_questions: 5,
-          best_score: 85,
-          is_completed: false,
-          progress_percentage: 60,
-        }
-      },
-      'energi-kinetik': {
-        id: 2,
-        name: "Energi Kinetik",
-        slug: "energi-kinetik",
-        subtitle: "Ek = ½mv²",
-        difficulty: "Intermediate",
-        estimated_duration: 20,
-        icon: "💫",
-        order_index: 2,
-        progress: {
-          completed_questions: 0,
-          total_questions: 4,
-          best_score: 0,
-          is_completed: false,
-          progress_percentage: 0,
-        }
-      },
-      'momentum': {
-        id: 3,
-        name: "Momentum",
-        slug: "momentum",
-        subtitle: "p = m × v",
-        difficulty: "Advanced",
-        estimated_duration: 25,
-        icon: "🎯",
-        order_index: 3,
-        progress: {
-          completed_questions: 1,
-          total_questions: 6,
-          best_score: 78,
-          is_completed: false,
-          progress_percentage: 17,
-        }
-      },
-      'gaya-gesek': {
-        id: 4,
-        name: "Gaya Gesek",
-        slug: "gaya-gesek",
-        subtitle: "f = μN",
-        difficulty: "Beginner",
-        estimated_duration: 18,
-        icon: "🔥",
-        order_index: 4,
-        progress: {
-          completed_questions: 3,
-          total_questions: 3,
-          best_score: 92,
-          is_completed: true,
-          progress_percentage: 100,
-        }
-      },
-    };
 
-    const mockTopic = mockTopics[slug as keyof typeof mockTopics];
-    if (mockTopic) {
-      setTopic(mockTopic as PhysicsTopic);
-    }
-  };
 
-  const loadMockQuestions = () => {
-    const mockQuestions: SimulationQuestion[] = [
-      {
-        id: 1,
-        question_text: "Sebuah balok bermassa 5 kg didorong dengan gaya 20 N. Berapa percepatan balok tersebut?",
-        simulation_type: "force_calculation",
-        parameters: {
-          mass: 5,
-          force: 20,
-          friction: 0
-        },
-        evaluation_criteria: {
-          expected_acceleration: 4,
-          tolerance: 0.1
-        },
-        hints: [
-          "Gunakan rumus F = m × a",
-          "Ingat bahwa a = F / m",
-          "Pastikan satuan sudah benar"
-        ],
-        max_score: 100
-      },
-      {
-        id: 2,
-        question_text: "Dua balok dengan massa berbeda dihubungkan dengan tali. Hitung percepatan sistem!",
-        simulation_type: "connected_blocks",
-        parameters: {
-          mass1: 3,
-          mass2: 7,
-          applied_force: 30
-        },
-        evaluation_criteria: {
-          expected_acceleration: 3,
-          tolerance: 0.2
-        },
-        hints: [
-          "Gunakan hukum Newton untuk sistem",
-          "Total massa = m1 + m2",
-          "a = F_total / m_total"
-        ],
-        max_score: 100
-      },
-      {
-        id: 3,
-        question_text: "Sebuah mobil bergerak dengan kecepatan konstan 60 km/h. Tiba-tiba direm dengan gaya 1000 N. Massa mobil 800 kg. Berapa percepatan pengereman?",
-        simulation_type: "braking_force",
-        parameters: {
-          mass: 800,
-          initial_velocity: 16.67, // 60 km/h in m/s
-          braking_force: 1000
-        },
-        evaluation_criteria: {
-          expected_acceleration: -1.25,
-          tolerance: 0.1
-        },
-        hints: [
-          "Gaya rem berlawanan arah gerak",
-          "a = F / m, dengan F negatif",
-          "Konversi km/h ke m/s jika perlu"
-        ],
-        max_score: 100
-      }
-    ];
-
-    setQuestions(mockQuestions);
-  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -230,11 +82,10 @@ export default function TopicDetailScreen() {
   const handleQuestionPress = (question: SimulationQuestion) => {
     console.log('🔍 Question selected:', question.id, question.simulation_type);
     
-    // Navigate to question simulation screen
+    // ✅ Navigate ke question detail untuk preview (optional)
     router.push({
-      pathname: '/simulasi/question/[id]',
+      pathname: `/simulation/question/${question.id}`,
       params: { 
-        id: question.id.toString(),
         topicSlug: slug || '',
         topicName: topic?.name || ''
       }
@@ -243,14 +94,11 @@ export default function TopicDetailScreen() {
 
   const handleStartSimulation = () => {
     if (!topic) return;
-    
+  
     console.log('🚀 Start simulation for topic:', topic.slug);
-    
-    // Navigate to simulation screen with topic
-    router.push({
-      pathname: '/simulasi/[slug]',
-      params: { slug: topic.slug }
-    });
+  
+    // ✅ Navigate to main simulation screen dengan WebView
+    router.push(`/simulation/${topic.slug}`);
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -356,7 +204,7 @@ export default function TopicDetailScreen() {
             style={styles.backButton} 
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>Kembali</Text>
+            <Text style={styles.backButton}>Kembali</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -387,20 +235,20 @@ export default function TopicDetailScreen() {
       <View style={styles.topicCard}>
         <View style={styles.topicHeader}>
           <View style={styles.topicIconContainer}>
-            <Text style={styles.topicIcon}>{getTopicIcon(topic)}</Text>
+        <Text style={styles.topicIcon}>{getTopicIcon(topic)}</Text>
           </View>
           <View style={styles.topicHeaderRight}>
-            <View style={[
-              styles.difficultyBadge,
-              { backgroundColor: getDifficultyColor(topic.difficulty) + '20' }
-            ]}>
-              <Text style={[
-                styles.difficultyText,
-                { color: getDifficultyColor(topic.difficulty) }
-              ]}>
-                {getDifficultyLabel(topic.difficulty)}
-              </Text>
-            </View>
+        <View style={[
+          styles.difficultyBadge,
+          { backgroundColor: getDifficultyColor(topic.difficulty) + '20' }
+        ]}>
+          <Text style={[
+            styles.difficultyText,
+            { color: getDifficultyColor(topic.difficulty) }
+          ]}>
+            {getDifficultyLabel(topic.difficulty)}
+          </Text>
+        </View>
           </View>
         </View>
 
@@ -409,57 +257,25 @@ export default function TopicDetailScreen() {
 
         <View style={styles.topicStats}>
           <View style={styles.statItem}>
-            <Text style={styles.statIcon}>⏱️</Text>
-            <Text style={styles.statText}>{topic.estimated_duration} min</Text>
+        <Text style={styles.statIcon}>⏱️</Text>
+        <Text style={styles.statText}>{topic.estimated_duration} min</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statIcon}>📝</Text>
-            <Text style={styles.statText}>{questions.length} soal</Text>
+        <Text style={styles.statIcon}>📝</Text>
+        <Text style={styles.statText}>{questions.length} soal</Text>
           </View>
-          {topic.progress && (
-            <View style={styles.statItem}>
-              <Text style={styles.statIcon}>🏆</Text>
-              <Text style={styles.statText}>{topic.progress.best_score}/100</Text>
-            </View>
-          )}
         </View>
-
-        {/* Progress Bar */}
-        {topic.progress && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>Progress</Text>
-              <Text style={styles.progressPercentage}>
-                {topic.progress.progress_percentage}%
-              </Text>
-            </View>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill,
-                  { 
-                    width: `${topic.progress.progress_percentage}%`,
-                    backgroundColor: getDifficultyColor(topic.difficulty)
-                  }
-                ]}
-              />
-            </View>
-            <Text style={styles.progressText}>
-              {topic.progress.completed_questions}/{topic.progress.total_questions} soal selesai
-            </Text>
-          </View>
-        )}
 
         {/* Action Button */}
         <TouchableOpacity 
           style={[
-            styles.actionButton,
-            { backgroundColor: getDifficultyColor(topic.difficulty) }
+        styles.actionButton,
+        { backgroundColor: getDifficultyColor(topic.difficulty) }
           ]}
           onPress={handleStartSimulation}
         >
           <Text style={styles.actionButtonText}>
-            {topic.progress?.is_completed ? '🔄 Ulangi Simulasi' : '🚀 Mulai Simulasi'}
+        🚀 Mulai Simulasi
           </Text>
         </TouchableOpacity>
       </View>
@@ -469,29 +285,55 @@ export default function TopicDetailScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>📋 Daftar Soal</Text>
           <Text style={styles.sectionSubtitle}>
-            {questions.length} soal simulasi tersedia
+        {questions.length} soal simulasi tersedia
           </Text>
         </View>
 
         {questionsLoading ? (
           <View style={styles.questionsLoading}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.loadingText}>Memuat soal...</Text>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.loadingText}>Memuat soal...</Text>
           </View>
         ) : questions.length > 0 ? (
           <FlatList
-            data={questions}
-            renderItem={renderQuestionItem}
-            keyExtractor={(item) => item.id.toString()}
-            scrollEnabled={false}
-            showsVerticalScrollIndicator={false}
+        data={questions}
+        renderItem={({ item, index }) => (
+          <View style={styles.questionCard}>
+            <View style={styles.questionHeader}>
+          <View style={styles.questionNumber}>
+            <Text style={styles.questionNumberText}>{index + 1}</Text>
+          </View>
+          <View style={styles.questionMeta}>
+            <View style={styles.typeTag}>
+              <Text style={styles.typeText}>{item.simulation_type}</Text>
+            </View>
+          </View>
+            </View>
+            
+            <Text style={styles.questionText}>{item.question_text}</Text>
+            
+            <View style={styles.questionFooter}>
+          <View style={styles.hintCount}>
+            <Text style={styles.hintIcon}>💡</Text>
+            <Text style={styles.hintText}>{item.hints?.length || 0} hints</Text>
+          </View>
+          <View style={styles.scoreInfo}>
+            <Text style={styles.scoreIcon}>🏆</Text>
+            <Text style={styles.scoreText}>{item.max_score} pts</Text>
+          </View>
+            </View>
+          </View>
+        )}
+        keyExtractor={(item) => item.id.toString()}
+        scrollEnabled={false}
+        showsVerticalScrollIndicator={false}
           />
         ) : (
           <View style={styles.emptyQuestions}>
-            <Text style={styles.emptyTitle}>📝 Belum Ada Soal</Text>
-            <Text style={styles.emptyMessage}>
-              Soal untuk topik ini sedang dalam pengembangan
-            </Text>
+        <Text style={styles.emptyTitle}>📝 Belum Ada Soal</Text>
+        <Text style={styles.emptyMessage}>
+          Soal untuk topik ini sedang dalam pengembangan
+        </Text>
           </View>
         )}
       </View>
@@ -523,7 +365,7 @@ const styles = StyleSheet.create({
   },
   authMessage: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
     textAlign: 'center',
     marginBottom: 24,
@@ -549,7 +391,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
   },
   errorContainer: {
@@ -566,7 +408,7 @@ const styles = StyleSheet.create({
   },
   errorMessage: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
     textAlign: 'center',
     marginBottom: 24,
@@ -593,11 +435,11 @@ const styles = StyleSheet.create({
   backIcon: {
     fontSize: 20,
     color: '#FFFFFF',
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
   },
   headerTitle: {
     fontSize: fonts.sizes.subtitle,
-    fontFamily: fonts.title,
+    fontFamily: fonts.subtitle,
     color: '#FFFFFF',
   },
   headerSpacer: {
@@ -653,7 +495,7 @@ const styles = StyleSheet.create({
   },
   topicSubtitle: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
     marginBottom: 20,
   },
@@ -672,7 +514,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
   },
 
@@ -708,7 +550,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
   },
 
@@ -734,13 +576,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: fonts.sizes.subtitle,
-    fontFamily: fonts.title,
+    fontFamily: fonts.subtitle,
     color: colors.primary,
     marginBottom: 4,
   },
   sectionSubtitle: {
     fontSize: fonts.sizes.small,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
   },
 
@@ -787,7 +629,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   typeTag: {
-    backgroundColor: colors.secondary + '20',
+    backgroundColor: colors.accent + '20',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -795,7 +637,7 @@ const styles = StyleSheet.create({
   typeText: {
     fontSize: fonts.sizes.caption,
     fontFamily: fonts.body,
-    color: colors.secondary,
+    color: colors.accent,
   },
   questionArrow: {
     fontSize: 20,
@@ -803,7 +645,7 @@ const styles = StyleSheet.create({
   },
   questionText: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     lineHeight: 22,
     marginBottom: 16,
@@ -823,7 +665,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
   },
   scoreInfo: {
@@ -836,7 +678,7 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     fontSize: fonts.sizes.caption,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.accent,
   },
 
@@ -847,13 +689,13 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: fonts.sizes.subtitle,
-    fontFamily: fonts.title,
+    fontFamily: fonts.subtitle,
     color: colors.primary,
     marginBottom: 8,
   },
   emptyMessage: {
     fontSize: fonts.sizes.body,
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyRegular,
     color: colors.muted,
     textAlign: 'center',
   },
